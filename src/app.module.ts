@@ -41,7 +41,7 @@ console.log('DB Config:', {
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'jobmarket',
       entities: [__dirname + '/**/*.entity{.ts,.js}'], 
-      synchronize: true,
+      synchronize: false,
     }),
     JobModule, // Chỉ cần import JobModule
   ],

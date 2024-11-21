@@ -70,7 +70,7 @@ export class JobService {
 
                   let company = await queryRunner.manager.findOne(Company, {
                         where: { name: jobData.company_name },
-                    });                    
+                  });
 
                   if (!company) {
                         company = queryRunner.manager.create(Company, {
@@ -175,6 +175,16 @@ export class JobService {
                   throw error;
             } finally {
                   await queryRunner.release();
+            }
+      }
+
+      async getJAllJobs(): Promise<Job[]> {
+            try {
+                  return await this.jobRepository.find({
+                        relations: ['workLocation', 'workLocation.district', 'company', 'refJob', 'company.images'],
+                  });
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
             }
       }
 }
