@@ -5,9 +5,6 @@ export class RefJob {
   @PrimaryColumn()
   ref_job_Id: number;
 
-  @Column()
-  ref_Id: number;
-
   @Column({ length: 255 })
   ref_url: string;
 

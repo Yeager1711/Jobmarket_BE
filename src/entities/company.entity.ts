@@ -8,7 +8,7 @@ export class Company {
   @PrimaryColumn()
   companyId: number;
 
-  @Column({ length: 255 })
+  @Column({ unique: true })
   name: string;
 
   @CreateDateColumn()

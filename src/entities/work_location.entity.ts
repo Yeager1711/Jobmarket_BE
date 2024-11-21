@@ -15,7 +15,7 @@ export class WorkLocation {
   address_name: string;
 
   @ManyToOne(() => District)
-  @JoinColumn({ name: 'district' })
+  @JoinColumn({ name: 'districtId' })
   district: District;
 
   @CreateDateColumn()

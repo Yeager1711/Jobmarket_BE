@@ -1,8 +1,8 @@
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn ,PrimaryColumn } from 'typeorm';
 
 @Entity('district')
 export class District {
-  @PrimaryColumn()
+  @PrimaryGeneratedColumn()
   districtId: number;
 
   @Column({ length: 255 })

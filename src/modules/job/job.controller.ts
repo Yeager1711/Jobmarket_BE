@@ -13,13 +13,13 @@ export class JobController {
             return { success: true, message: 'Job created successfully', data: savedJob };
       }
 
-      @Get()
-      async getJobDetails() {
-            try {
-                  const jobData = await this.jobService.getJobDetailsWithCompanyAndDistrict();
-                  return jobData;
-            } catch (error) {
-                  throw new Error(`Error retrieving job details: ${error.message}`);
-            }
-      }
+      // @Get()
+      // async getJobDetails() {
+      //       try {
+      //             const jobData = await this.jobService.getJobDetailsWithCompanyAndDistrict();
+      //             return jobData;
+      //       } catch (error) {
+      //             throw new Error(`Error retrieving job details: ${error.message}`);
+      //       }
+      // }
 }
