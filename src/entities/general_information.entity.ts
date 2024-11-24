@@ -1,19 +1,20 @@
-import { Entity, PrimaryColumn, Column } from 'typeorm';
+import { Entity, PrimaryColumn, Column, OneToMany } from 'typeorm';
+import { Job } from './job.entity';
 
 @Entity('general_Information')
 export class GeneralInformation {
   @PrimaryColumn()
   general_Information_Id: number;
 
-  @Column({ length: 255 })
-  rank: string;
-
+  @Column()
+  experience: string
+  
   @Column()
   numberOfRecruits: number;
 
   @Column({ length: 255 })
-  work_form: string;
-
-  @Column({ length: 255 })
   gender: string;
+
+  @OneToMany(() => Job, (job) => job.generalInformation)
+  jobs: Job[];
 }

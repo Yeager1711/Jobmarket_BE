@@ -5,6 +5,6 @@ export class JobLevel {
   @PrimaryGeneratedColumn()
   jobLevelId: number;
 
-  @Column({ length: 255 })
-  name: string;
+  @Column("simple-array")
+  name: string[];
 }

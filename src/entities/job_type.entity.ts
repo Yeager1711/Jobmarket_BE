@@ -5,6 +5,7 @@ export class JobType {
   @PrimaryGeneratedColumn()
   jobTypeId: number;
 
-  @Column({ length: 255 })
-  name: string;
+  @Column("simple-array")
+  name: string[];
+
 }
