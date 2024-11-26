@@ -15,6 +15,9 @@ export class GeneralInformation {
   @Column({ length: 255 })
   gender: string;
 
+  @Column("simple-array")
+  tech_stack: string[];
+
   @OneToMany(() => Job, (job) => job.generalInformation)
   jobs: Job[];
 }

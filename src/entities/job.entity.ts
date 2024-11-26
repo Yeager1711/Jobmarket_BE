@@ -53,6 +53,9 @@ export class Job {
       refJob: RefJob;
 
       @Column({ nullable: true })
+      salary: string;
+
+      @Column({ nullable: true })
       salary_from: number;
 
       @Column({ nullable: true })

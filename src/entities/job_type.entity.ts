@@ -6,6 +6,8 @@ export class JobType {
   jobTypeId: number;
 
   @Column("simple-array")
-  name: string[];
+  work_at: string[];
 
+  @Column("simple-array")
+  name: string[];
 }

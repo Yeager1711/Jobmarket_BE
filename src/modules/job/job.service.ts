@@ -122,7 +122,9 @@ export class JobService {
                               general_Information_Id: jobData.job_Id,
                               numberOfRecruits: 0,
                               gender: 'no pairing',
-                              experience: jobData.experience
+                              experience: jobData.experience,
+                              tech_stack: jobData.tech_stack
+                          
                         });
                         await queryRunner.manager.save(generalInformation);
                   } else {
@@ -178,6 +180,7 @@ export class JobService {
                   if (!jobType) {
                         jobType = queryRunner.manager.create(JobType, {
                               jobTypeId: jobData.job_Id,
+                              work_at: jobData.work_at,
                               name: jobData.job_type,
                         });
                         await queryRunner.manager.save(jobType);
@@ -207,6 +210,7 @@ export class JobService {
                         requirement: jobData.requirement,
                         salary_from: jobData.salary_from,
                         salary_to: jobData.salary_to,
+                        salary: jobData.salary,
                         benefits: jobData.benefit,
                         work_time: 'undetermined',
                         generalInformation: generalInformation,
@@ -250,7 +254,7 @@ export class JobService {
             }
       }
 
-      async getJobById(jobId: number): Promise<Job> {
+      async getJobById(jobId: number): Promise<Job | null> {
             try {
                   const job = await this.jobRepository.findOne({
                         where: { jobId },
