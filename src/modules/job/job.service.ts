@@ -123,8 +123,7 @@ export class JobService {
                               numberOfRecruits: 0,
                               gender: 'no pairing',
                               experience: jobData.experience,
-                              tech_stack: jobData.tech_stack
-                          
+                              tech_stack: jobData.tech_stack,
                         });
                         await queryRunner.manager.save(generalInformation);
                   } else {
@@ -280,4 +279,28 @@ export class JobService {
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }
       }
+
+      async getJobsByTech(tech: string): Promise<Job[]> {
+            try {
+                // Use QueryBuilder for more complex queries
+                const jobs = await this.jobRepository
+                    .createQueryBuilder('job')
+                    .leftJoinAndSelect('job.workLocation', 'workLocation')
+                    .leftJoinAndSelect('workLocation.district', 'district')
+                    .leftJoinAndSelect('job.company', 'company')
+                    .leftJoinAndSelect('company.images', 'images')
+                    .leftJoinAndSelect('job.refJob', 'refJob')
+                    .leftJoinAndSelect('job.jobType', 'jobType')
+                    .leftJoinAndSelect('job.jobLevel', 'jobLevel')
+                    .leftJoinAndSelect('job.jobIndustry', 'jobIndustry')
+                    .leftJoinAndSelect('job.generalInformation', 'generalInformation')
+                    .where('generalInformation.tech_stack LIKE :tech', { tech: `%${tech}%` })
+                    .getMany();
+        
+                return jobs;
+            } catch (error) {
+                throw new Error(`Error retrieving jobs by tech: ${error.message}`);
+            }
+        }
+        
 }

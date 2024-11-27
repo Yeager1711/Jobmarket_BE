@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body } from '@nestjs/common'; // Added imports for Get and Param
+import { Controller, Post, Get, Param, Body, Query } from '@nestjs/common';
 import { JobService } from './job.service';
 import { Job } from '../../entities/job.entity';
 import { AppService } from 'src/app.service';
@@ -31,6 +31,16 @@ export class JobController {
                   return { success: true, data: job };
             } catch (error) {
                   throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
+      @Get('by-tech/:tech')
+      async getJobsByTech(@Param('tech') tech: string) {
+            try {
+                  const jobs = await this.jobService.getJobsByTech(tech);
+                  return { success: true, data: jobs };
+            } catch (error) {
+                  throw new Error(`Error retrieving jobs by tech: ${error.message}`);
             }
       }
 }
