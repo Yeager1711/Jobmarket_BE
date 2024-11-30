@@ -24,6 +24,29 @@ export class JobController {
             }
       }
 
+      @Get('job_skip')
+      async getJobsTakeBy(@Query('skip') skip: string, @Query('take') take: string) {
+            const parsedSkip = parseInt(skip, 10);
+            const parsedTake = parseInt(take, 10);
+
+            if (isNaN(parsedSkip) || isNaN(parsedTake)) {
+                  throw new Error(
+                        'Invalid "skip" or "take" parameter. Please provide numeric values.'
+                  );
+            }
+
+            try {
+                  const { items, total } = await this.jobService.getJobsTakeBy(
+                        parsedSkip,
+                        parsedTake
+                  );
+
+                  return { success: true, data: items, totalItems: total };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
       @Get(':jobId')
       async getJobById(@Param('jobId') jobId: number) {
             try {
@@ -41,6 +64,16 @@ export class JobController {
                   return { success: true, data: jobs };
             } catch (error) {
                   throw new Error(`Error retrieving jobs by tech: ${error.message}`);
+            }
+      }
+
+      @Get('by-nameCompany/:name')
+      async getJobsByNameCompany(@Param('name') name: string) {
+            try {
+                  const jobs = await this.jobService.getJobsByNameCompany(name);
+                  return { success: true, data: jobs };
+            } catch (error) {
+                  throw new Error(`Error retrieving jobs by name company: ${error.message}`);
             }
       }
 }

@@ -253,6 +253,41 @@ export class JobService {
             }
       }
 
+      async getJobsTakeBy(
+            skip: number,
+            take: number
+      ): Promise<{ items: Job[]; total: number }> {
+            try {
+                  const [items, total] = await this.jobRepository.findAndCount({
+                        relations: [
+                              'workLocation',
+                              'workLocation.district',
+                              'company',
+                              'refJob',
+                              'company.images',
+                              'jobType',
+                              'jobLevel',
+                              'jobIndustry',
+                              'generalInformation',
+                        ],
+                        skip,
+                        take,
+                  });
+
+                  const sortItems = items.sort(
+                        (a, b) =>
+                              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                  );
+
+                  console.log('Fetched Items:', items);
+                  console.log('Total Items:', total);
+
+                  return { items: sortItems, total };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
       async getJobById(jobId: number): Promise<Job | null> {
             try {
                   const job = await this.jobRepository.findOne({
@@ -282,25 +317,46 @@ export class JobService {
 
       async getJobsByTech(tech: string): Promise<Job[]> {
             try {
-                // Use QueryBuilder for more complex queries
-                const jobs = await this.jobRepository
-                    .createQueryBuilder('job')
-                    .leftJoinAndSelect('job.workLocation', 'workLocation')
-                    .leftJoinAndSelect('workLocation.district', 'district')
-                    .leftJoinAndSelect('job.company', 'company')
-                    .leftJoinAndSelect('company.images', 'images')
-                    .leftJoinAndSelect('job.refJob', 'refJob')
-                    .leftJoinAndSelect('job.jobType', 'jobType')
-                    .leftJoinAndSelect('job.jobLevel', 'jobLevel')
-                    .leftJoinAndSelect('job.jobIndustry', 'jobIndustry')
-                    .leftJoinAndSelect('job.generalInformation', 'generalInformation')
-                    .where('generalInformation.tech_stack LIKE :tech', { tech: `%${tech}%` })
-                    .getMany();
-        
-                return jobs;
+                  const jobs = await this.jobRepository
+                        .createQueryBuilder('job')
+                        .leftJoinAndSelect('job.workLocation', 'workLocation')
+                        .leftJoinAndSelect('workLocation.district', 'district')
+                        .leftJoinAndSelect('job.company', 'company')
+                        .leftJoinAndSelect('company.images', 'images')
+                        .leftJoinAndSelect('job.refJob', 'refJob')
+                        .leftJoinAndSelect('job.jobType', 'jobType')
+                        .leftJoinAndSelect('job.jobLevel', 'jobLevel')
+                        .leftJoinAndSelect('job.jobIndustry', 'jobIndustry')
+                        .leftJoinAndSelect('job.generalInformation', 'generalInformation')
+                        .where('generalInformation.tech_stack LIKE :tech', { tech: `%${tech}%` })
+                        .getMany();
+
+                  return jobs;
             } catch (error) {
-                throw new Error(`Error retrieving jobs by tech: ${error.message}`);
+                  throw new Error(`Error retrieving jobs by tech: ${error.message}`);
             }
-        }
-        
+      }
+
+      async getJobsByNameCompany(name: string): Promise<Job[]> {
+            try {
+                  // Use QueryBuilder for more complex queries
+                  const jobs = await this.jobRepository
+                        .createQueryBuilder('job')
+                        .leftJoinAndSelect('job.workLocation', 'workLocation')
+                        .leftJoinAndSelect('workLocation.district', 'district')
+                        .leftJoinAndSelect('job.company', 'company')
+                        .leftJoinAndSelect('company.images', 'images')
+                        .leftJoinAndSelect('job.refJob', 'refJob')
+                        .leftJoinAndSelect('job.jobType', 'jobType')
+                        .leftJoinAndSelect('job.jobLevel', 'jobLevel')
+                        .leftJoinAndSelect('job.jobIndustry', 'jobIndustry')
+                        .leftJoinAndSelect('job.generalInformation', 'generalInformation')
+                        .where('company.name LIKE :name', { name: `%${name}%` })
+                        .getMany();
+
+                  return jobs;
+            } catch (error) {
+                  throw new Error(`Error retrieving jobs by tech: ${error.message}`);
+            }
+      }
 }
