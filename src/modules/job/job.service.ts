@@ -257,8 +257,10 @@ export class JobService {
             totalJobs: number;
             uniqueCompanies: number;
             jobsUpdatedIn48Hours: number;
-            jobsCreatedByDate: { date: string; count: number }[]; // Array of objects with date and job count
+            jobsCreatedByDate: { date: string; count: number }[];
             jobIndustries: { name: string; jobCount: number }[];
+            totalSalaryAboveThreshold: number;
+            totalSalaryAboveThreshold_Upto: number;
       }> {
             try {
                   const jobs = await this.jobRepository.find({
@@ -342,6 +344,14 @@ export class JobService {
                   // Kết hợp ngành nghề có jobCount cao nhất vào đầu mảng
                   const finalIndustries = [topIndustry, ...shuffledIndustries];
 
+                  const totalSalaryAboveThreshold = jobs
+                        .filter((job) => job.salary_to && job.salary_to > 1000000) // Lọc các job có salary_to > 1,000,000
+                        .reduce((sum, job) => sum + job.salary_to, 0);
+
+                  const totalSalaryAboveThreshold_Upto = jobs
+                        .filter((job) => job.salary_from === 0 && job.salary_to) // Ensure `salary_from === 0` and `salary_to` exists
+                        .reduce((sum, job) => sum + job.salary_to, 0);
+
                   // Log kết quả
                   console.log('Total Jobs:', totalJobs);
                   console.log('Unique Companies:', uniqueCompanies);
@@ -353,8 +363,10 @@ export class JobService {
                         totalJobs,
                         uniqueCompanies,
                         jobsUpdatedIn48Hours,
-                        jobsCreatedByDate, // Return the array of job counts for each date in the last 7 days
-                        jobIndustries: finalIndustries, // Return the final shuffled industries with the highest job count first
+                        jobsCreatedByDate,
+                        jobIndustries: finalIndustries,
+                        totalSalaryAboveThreshold,
+                        totalSalaryAboveThreshold_Upto,
                   };
             } catch (error) {
                   throw new Error(`Error retrieving job details: ${error.message}`);
