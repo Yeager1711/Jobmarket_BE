@@ -17,8 +17,18 @@ export class JobController {
       @Get('all-jobs')
       async getJAllJobs() {
             try {
-                  const jobData = await this.jobService.getJAllJobs();
+                  const jobData = await this.jobService.getAllJobs();
                   return { success: true, data: jobData };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
+      @Get('chart-section')
+      async getParamChart() {
+            try {
+                  const chartData = await this.jobService.getParamChart();
+                  return { success: true, data: chartData };
             } catch (error) {
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }

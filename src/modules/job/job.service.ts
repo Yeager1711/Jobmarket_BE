@@ -233,7 +233,7 @@ export class JobService {
             }
       }
 
-      async getJAllJobs(): Promise<Job[]> {
+      async getAllJobs(): Promise<Job[]> {
             try {
                   return await this.jobRepository.find({
                         relations: [
@@ -253,10 +253,115 @@ export class JobService {
             }
       }
 
-      async getJobsTakeBy(
-            skip: number,
-            take: number
-      ): Promise<{ items: Job[]; total: number }> {
+      async getParamChart(): Promise<{
+            totalJobs: number;
+            uniqueCompanies: number;
+            jobsUpdatedIn48Hours: number;
+            jobsCreatedByDate: { date: string; count: number }[]; // Array of objects with date and job count
+            jobIndustries: { name: string; jobCount: number }[];
+      }> {
+            try {
+                  const jobs = await this.jobRepository.find({
+                        relations: [
+                              'workLocation',
+                              'workLocation.district',
+                              'company',
+                              'jobType',
+                              'jobLevel',
+                              'jobIndustry',
+                              'generalInformation',
+                        ],
+                  });
+
+                  // Tính tổng số công việc
+                  const totalJobs = jobs.length;
+
+                  // Tính số công ty không trùng lặp
+                  const companyNames = new Set(jobs.map((job) => job.company?.name));
+                  const uniqueCompanies = companyNames.size;
+
+                  // Tính số công việc được cập nhật trong 48 giờ qua
+                  const now = new Date();
+                  const jobsUpdatedIn48Hours = jobs.filter((job) => {
+                        const createdAt = new Date(job.created_at);
+                        const diffInHours =
+                              (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+                        return diffInHours <= 48;
+                  }).length;
+
+                  // Tính số công việc tạo trong 7 ngày qua và đếm số lượng công việc theo ngày
+                  const last7Days = [];
+                  for (let i = 0; i < 7; i++) {
+                        const date = new Date();
+                        date.setDate(now.getDate() - i);
+                        last7Days.push(date.toISOString().split('T')[0]); // Format date to YYYY-MM-DD
+                  }
+
+                  const jobsCreatedByDate = last7Days.map((date) => {
+                        const jobCountOnDate = jobs.filter((job) => {
+                              const createdAt = new Date(job.created_at);
+                              const jobDate = createdAt.toISOString().split('T')[0]; // Get date part only
+                              return jobDate === date;
+                        }).length;
+                        return { date, count: jobCountOnDate };
+                  });
+
+                  // Lấy danh sách ngành nghề (industry names) và đếm số công việc theo ngành nghề
+                  const industryJobCount: { [key: string]: number } = {};
+                  jobs.forEach((job) => {
+                        const industryName = job.jobIndustry?.name;
+                        if (industryName) {
+                              if (industryJobCount[industryName]) {
+                                    industryJobCount[industryName] += 1;
+                              } else {
+                                    industryJobCount[industryName] = 1;
+                              }
+                        }
+                  });
+
+                  // Chuyển đổi kết quả thành mảng các đối tượng với name và jobCount
+                  const jobIndustries = Object.keys(industryJobCount).map((industry) => ({
+                        name: industry,
+                        jobCount: industryJobCount[industry],
+                  }));
+
+                  // Sắp xếp các ngành nghề theo jobCount giảm dần và lấy 7 ngành có jobCount cao nhất
+                  const sortedIndustries = jobIndustries
+                        .sort((a, b) => b.jobCount - a.jobCount) // Sort in descending order of jobCount
+                        .slice(0, 7); // Get top 7 industries
+
+                  // Lấy ngành nghề có jobCount cao nhất và lưu vào biến `topIndustry`
+                  const topIndustry = sortedIndustries[0];
+
+                  // Tách ngành nghề với jobCount cao nhất ra khỏi mảng
+                  const otherIndustries = sortedIndustries.slice(1);
+
+                  // Sắp xếp ngẫu nhiên các ngành còn lại
+                  const shuffledIndustries = otherIndustries.sort(() => Math.random() - 0.5);
+
+                  // Kết hợp ngành nghề có jobCount cao nhất vào đầu mảng
+                  const finalIndustries = [topIndustry, ...shuffledIndustries];
+
+                  // Log kết quả
+                  console.log('Total Jobs:', totalJobs);
+                  console.log('Unique Companies:', uniqueCompanies);
+                  console.log('Jobs Updated in Last 48 Hours:', jobsUpdatedIn48Hours);
+                  console.log('Jobs Created by Date:', jobsCreatedByDate);
+                  console.log('Job Industries:', finalIndustries);
+
+                  return {
+                        totalJobs,
+                        uniqueCompanies,
+                        jobsUpdatedIn48Hours,
+                        jobsCreatedByDate, // Return the array of job counts for each date in the last 7 days
+                        jobIndustries: finalIndustries, // Return the final shuffled industries with the highest job count first
+                  };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
+      async getJobsTakeBy(skip: number, take: number): Promise<{ items: Job[]; total: number }> {
             try {
                   const [items, total] = await this.jobRepository.findAndCount({
                         relations: [
