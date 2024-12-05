@@ -12,6 +12,8 @@ import { RefJob } from '../../entities/ref_job.entity';
 import { GeneralInformation } from '../../entities/general_information.entity';
 import { District } from '../../entities/district.entity';
 
+import { sortExperience } from './ultis/sort/sortExperience';
+
 @Injectable()
 export class JobService {
       constructor(
@@ -253,6 +255,138 @@ export class JobService {
             }
       }
 
+      async getAllJobs_Types(): Promise<{
+            category: {
+                  jobLevels: string[];
+                  jobIndustries: string[];
+                  TechStack: string[];
+                  Experience: string[];
+                  jobTypesWorkAt:string[];
+                  jobTypesName:string[];
+            };
+            jobs: Job[];
+      }> {
+            try {
+                  const jobs = await this.jobRepository.find({
+                        relations: [
+                              'workLocation',
+                              'workLocation.district',
+                              'company',
+                              'refJob',
+                              'company.images',
+                              'jobType',
+                              'jobLevel',
+                              'jobIndustry',
+                              'generalInformation',
+                        ],
+                  });
+
+                  const jobIndustriesSet = new Set<string>();
+                  const techStackSet = new Set<string>();
+                  const jobLevelsSet = new Set<string>();
+                  const jobExperienceSet = new Set<string>();
+                  const jobTypesWorkAtSet = new Set<string>();
+                  const jobTypesNameSet = new Set<string>();
+
+                  jobs.forEach((job) => {
+                        // Tách và chuẩn hóa dữ liệu từ jobIndustry
+                        if (job.jobIndustry?.name) {
+                              const industries = job.jobIndustry.name
+                                    .split(',')
+                                    .map((industry) => industry.trim().toLowerCase());
+                              industries.forEach((industry) => {
+                                    if (industry) jobIndustriesSet.add(industry);
+                              });
+                        }
+
+                        // Lấy và chuẩn hóa TechStack
+                        if (job.generalInformation?.tech_stack) {
+                              job.generalInformation.tech_stack.forEach((tech) => {
+                                    if (tech) techStackSet.add(tech.trim().toLowerCase());
+                              });
+                        }
+
+                        // Lấy và chuẩn hóa jobLevel
+                        if (job.jobLevel?.name) {
+                              const levels = Array.isArray(job.jobLevel.name)
+                                    ? job.jobLevel.name
+                                    : [job.jobLevel.name];
+                              levels.forEach((level) => {
+                                    if (level) jobLevelsSet.add(level.trim().toLowerCase());
+                              });
+                        }
+
+                        // Lấy và chuẩn hóa kinh nghiệm (experience)
+                        if (job.generalInformation?.experience) {
+                              const experience = Array.isArray(job.generalInformation.experience)
+                                    ? job.generalInformation.experience
+                                    : [job.generalInformation.experience];
+
+                              experience.forEach((ex) => {
+                                    if (ex) jobExperienceSet.add(ex.trim().toLowerCase()); // Đảm bảo chuẩn hóa đúng
+                              });
+                        }
+
+                        if(job.jobType?.work_at) {
+                              const workAt = Array.isArray(job.jobType.work_at)
+                              ? job.jobType.work_at 
+                              : [job.jobType.work_at];
+
+                              workAt.forEach((workAt) => {
+                                    if(workAt) jobTypesWorkAtSet.add(workAt.trim().toLowerCase())
+                              });
+                        }
+
+                        if(job.jobType?.name) {
+                              const name = Array.isArray(job.jobType.name)
+                              ? job.jobType.name 
+                              : [job.jobType.name];
+
+                              name.forEach((name) => {
+                                    if(name) jobTypesNameSet.add(name.trim().toLowerCase())
+                              });
+                        }
+                  });
+
+                  // Sắp xếp và chuẩn hóa chữ cái đầu
+                  const jobIndustries = Array.from(jobIndustriesSet).map(
+                        (industry) => industry.charAt(0).toUpperCase() + industry.slice(1)
+                  );
+                  const TechStack = Array.from(techStackSet).map(
+                        (tech) => tech.charAt(0).toUpperCase() + tech.slice(1)
+                  );
+                  const jobLevels = Array.from(jobLevelsSet).map(
+                        (level) => level.charAt(0).toUpperCase() + level.slice(1)
+                  );
+                  const Experience = sortExperience(Array.from(jobExperienceSet)).map(
+                        // using sortExperience to sort experience from low to high
+                        (ex) => ex.charAt(0).toUpperCase() + ex.slice(1)
+                  );
+
+                  const jobTypesWorkAt = Array.from(jobTypesWorkAtSet).map(
+                        (workAt) => workAt.charAt(0).toUpperCase() + workAt.slice(1)
+                  );
+
+                  const jobTypesName = Array.from(jobTypesNameSet).map(
+                        (name) => name.charAt(0).toUpperCase() + name.slice(1)
+                  );
+
+                  return {
+                        category: {
+                              jobLevels,
+                              jobIndustries,
+                              TechStack,
+                              Experience,
+                              jobTypesWorkAt,
+                              jobTypesName
+                        },
+                        jobs: jobs,
+                  };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
       async getParamChart(): Promise<{
             totalJobs: number;
             uniqueCompanies: number;
@@ -288,7 +422,7 @@ export class JobService {
                         const createdAt = new Date(job.created_at);
                         const diffInHours =
                               (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-                        return diffInHours <= 48;
+                        return diffInHours <= 72;
                   }).length;
 
                   // Tính số công việc tạo trong 7 ngày qua và đếm số lượng công việc theo ngày

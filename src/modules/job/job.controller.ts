@@ -24,6 +24,16 @@ export class JobController {
             }
       }
 
+      @Get('all-jobsTypes')
+      async getAllJobs_Types() {
+            try {
+                  const jobData = await this.jobService.getAllJobs_Types();
+                  return { success: true, data: jobData };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
       @Get('chart-section')
       async getParamChart() {
             try {
@@ -86,4 +96,6 @@ export class JobController {
                   throw new Error(`Error retrieving jobs by name company: ${error.message}`);
             }
       }
+
+
 }
