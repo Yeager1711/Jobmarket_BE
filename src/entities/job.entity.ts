@@ -76,6 +76,12 @@ export class Job {
       @Column({ length: 255, nullable: true })
       work_time: string;
 
+      @Column({ default: 0, nullable: true })
+      view: number;    
+      
+      @Column({ nullable: true })
+      Hot_Job: string;
+
       @CreateDateColumn()
       created_at: Date;
 

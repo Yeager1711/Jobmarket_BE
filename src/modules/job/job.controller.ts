@@ -14,6 +14,21 @@ export class JobController {
             return { success: true, message: 'Job created successfully', data: savedJob };
       }
 
+      @Post('view/:jobId')
+      async postTotalView(@Param('jobId')  jobId: string) {
+            try {
+                  const numbericJobId = parseInt(jobId, 10)
+                  if(isNaN(numbericJobId)) {
+                        throw new Error("Invalid JobId")
+                  }
+
+                  const job = await this.jobService.viewJobById(numbericJobId);
+                  return {success: true, data: job};
+            }catch(error) {
+                  throw new Error(`Error retrieving job: ${error.message}`)
+            }
+      }
+
       @Get('all-jobs')
       async getJAllJobs() {
             try {
@@ -97,5 +112,5 @@ export class JobController {
             }
       }
 
-
+      
 }

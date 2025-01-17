@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from '../../entities/job.entity';
@@ -16,6 +16,7 @@ import { sortExperience } from './ultis/sort/sortExperience';
 
 @Injectable()
 export class JobService {
+      private readonly logger = new Logger(JobService.name);
       constructor(
             @InjectRepository(Job)
             private readonly jobRepository: Repository<Job>,
@@ -48,13 +49,9 @@ export class JobService {
             private readonly generalInformationRepository: Repository<GeneralInformation>
       ) {}
 
-      generateRandomRefId(baseNumber: number): number {
-            const randomNumber = Math.floor(Math.random() * 10000);
-            return baseNumber * 10000 + randomNumber;
-      }
-
       async saveJobData(jobData: any): Promise<Job> {
             if (!jobData.company_name) {
+                  this.logger.error('Invalid input: company_name is missing')
                   throw new Error('Invalid input: company_name is missing');
             }
 
@@ -62,6 +59,7 @@ export class JobService {
             await queryRunner.startTransaction();
 
             try {
+                  this.logger.log(`Processing job data for job_Id: ${jobData.job_Id}`)
                   // Kiểm tra job_Id đã tồn tại hay chưa
                   const existingJob = await queryRunner.manager.findOne(Job, {
                         where: { jobId: jobData.job_Id },
@@ -217,6 +215,8 @@ export class JobService {
                         generalInformation: generalInformation,
                         expire_on: '31/12/2024',
                         refJob: refJob,
+                        //view: 0,
+                        Hot_Job: jobData.Hot_Job || 'Null',
                         created_at: new Date(),
                         updated_at: new Date(),
                   });
@@ -237,6 +237,7 @@ export class JobService {
 
       async getAllJobs(): Promise<Job[]> {
             try {
+                  this.logger.log('Fetching all jobs with relations');
                   return await this.jobRepository.find({
                         relations: [
                               'workLocation',
@@ -251,6 +252,7 @@ export class JobService {
                         ],
                   });
             } catch (error) {
+                  this.logger.error(`Error retrieving job details: ${error.message}`);
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }
       }
@@ -261,8 +263,9 @@ export class JobService {
                   jobIndustries: string[];
                   TechStack: string[];
                   Experience: string[];
-                  jobTypesWorkAt:string[];
-                  jobTypesName:string[];
+                  jobTypesWorkAt: string[];
+                  jobTypesName: string[];
+                  jobDistrict: string[];
             };
             jobs: Job[];
       }> {
@@ -287,6 +290,7 @@ export class JobService {
                   const jobExperienceSet = new Set<string>();
                   const jobTypesWorkAtSet = new Set<string>();
                   const jobTypesNameSet = new Set<string>();
+                  const jobDistrictSet = new Set<string>();
 
                   jobs.forEach((job) => {
                         // Tách và chuẩn hóa dữ liệu từ jobIndustry
@@ -323,28 +327,36 @@ export class JobService {
                                     : [job.generalInformation.experience];
 
                               experience.forEach((ex) => {
-                                    if (ex) jobExperienceSet.add(ex.trim().toLowerCase()); // Đảm bảo chuẩn hóa đúng
+                                    if (ex) jobExperienceSet.add(ex.trim().toLowerCase());
                               });
                         }
 
-                        if(job.jobType?.work_at) {
+                        if (job.jobType?.work_at) {
                               const workAt = Array.isArray(job.jobType.work_at)
-                              ? job.jobType.work_at 
-                              : [job.jobType.work_at];
+                                    ? job.jobType.work_at
+                                    : [job.jobType.work_at];
 
                               workAt.forEach((workAt) => {
-                                    if(workAt) jobTypesWorkAtSet.add(workAt.trim().toLowerCase())
+                                    if (workAt) jobTypesWorkAtSet.add(workAt.trim().toLowerCase());
                               });
                         }
 
-                        if(job.jobType?.name) {
+                        if (job.jobType?.name) {
                               const name = Array.isArray(job.jobType.name)
-                              ? job.jobType.name 
-                              : [job.jobType.name];
+                                    ? job.jobType.name
+                                    : [job.jobType.name];
 
                               name.forEach((name) => {
-                                    if(name) jobTypesNameSet.add(name.trim().toLowerCase())
+                                    if (name) jobTypesNameSet.add(name.trim().toLowerCase());
                               });
+                        }
+
+                        if (job.workLocation.district.name) {
+                              const districtNameParts = job.workLocation.district.name.split(',');
+                              const cityName =
+                                    districtNameParts[districtNameParts.length - 1].trim();
+
+                              jobDistrictSet.add(cityName);
                         }
                   });
 
@@ -371,6 +383,31 @@ export class JobService {
                         (name) => name.charAt(0).toUpperCase() + name.slice(1)
                   );
 
+                  const jobDistrict = Array.from(jobDistrictSet)
+                        .map((name) => {
+                              // Loại bỏ phần "(+x)"
+                              let cleanName = name.replace(/\(\+\d+\)/g, '').trim();
+
+                              // Chuẩn hóa tên địa điểm chung (nếu bắt đầu bằng "Thành phố")
+                              if (cleanName.toLowerCase().startsWith('thành phố')) {
+                                    cleanName = cleanName.split(' ').slice(2).join(' ').trim(); // Xóa "Thành phố"
+                              }
+
+                              // Chuẩn hóa chữ cái đầu
+                              cleanName =
+                                    cleanName.charAt(0).toUpperCase() +
+                                    cleanName.slice(1).toLowerCase();
+
+                              return cleanName;
+                        })
+                        .reduce((uniqueDistricts, currentDistrict) => {
+                              // Loại bỏ các tên trùng lặp sau khi chuẩn hóa
+                              if (!uniqueDistricts.includes(currentDistrict)) {
+                                    uniqueDistricts.push(currentDistrict);
+                              }
+                              return uniqueDistricts;
+                        }, []);
+
                   return {
                         category: {
                               jobLevels,
@@ -378,7 +415,8 @@ export class JobService {
                               TechStack,
                               Experience,
                               jobTypesWorkAt,
-                              jobTypesName
+                              jobTypesName,
+                              jobDistrict,
                         },
                         jobs: jobs,
                   };
@@ -422,7 +460,7 @@ export class JobService {
                         const createdAt = new Date(job.created_at);
                         const diffInHours =
                               (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-                        return diffInHours <= 72;
+                        return diffInHours <= 168;
                   }).length;
 
                   // Tính số công việc tạo trong 7 ngày qua và đếm số lượng công việc theo ngày
@@ -534,6 +572,36 @@ export class JobService {
                   console.log('Total Items:', total);
 
                   return { items: sortItems, total };
+            } catch (error) {
+                  throw new Error(`Error retrieving job details: ${error.message}`);
+            }
+      }
+
+      async viewJobById(jobId: number): Promise<Job | null> {
+            try {
+                  const job = await this.jobRepository.findOne({
+                        where: { jobId },
+                        relations: [
+                              'workLocation',
+                              'workLocation.district',
+                              'company',
+                              'refJob',
+                              'company.images',
+                              'jobType',
+                              'jobLevel',
+                              'jobIndustry',
+                              'generalInformation',
+                        ],
+                  });
+
+                  if (!job) {
+                        throw new Error('Job not found');
+                  }
+
+                  job.view = (job.view || 0) + 1;
+                  await this.jobRepository.save(job);
+
+                  return job;
             } catch (error) {
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }
