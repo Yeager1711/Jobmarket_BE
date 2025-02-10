@@ -15,9 +15,14 @@ import { Job } from './entities/job.entity';
 import { RefJob } from './entities/ref_job.entity';
 import { WorkLocation } from './entities/work_location.entity';
 import { GeneralInformation } from './entities/general_information.entity';
+import { ResumeCV } from './entities/resumecv.entity';
 
 // Import modules
 import { JobModule } from './modules/job/job.module';
+import { ChatGptModule } from './modules/job/chat-gpt/chat-gpt.module';
+import { AuthModule } from './modules/auth/register/auth.module';
+import { AuthUserModule } from './modules/auth/login/login_user.module';
+import { UserModule } from './modules/auth/user/user.module';
 
 // Log environment variables to check if they are loaded correctly
 console.log('DB Config:', {
@@ -32,6 +37,7 @@ console.log('DB Config:', {
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env'
     }),
     TypeOrmModule.forRoot({
       type: 'mysql',
@@ -43,7 +49,11 @@ console.log('DB Config:', {
       entities: [__dirname + '/**/*.entity{.ts,.js}'], 
       synchronize: false,
     }),
-    JobModule, // Chỉ cần import JobModule
+    JobModule,
+    ChatGptModule,
+    AuthModule,
+    AuthUserModule,
+    UserModule
   ],
 })
 export class AppModule {}

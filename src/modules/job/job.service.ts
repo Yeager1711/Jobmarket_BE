@@ -13,10 +13,13 @@ import { GeneralInformation } from '../../entities/general_information.entity';
 import { District } from '../../entities/district.entity';
 
 import { sortExperience } from './ultis/sort/sortExperience';
+import { WinstonLoggerService } from '../../common/logger';
 
 @Injectable()
 export class JobService {
-      private readonly logger = new Logger(JobService.name);
+      private readonly loggerNest = new Logger(JobService.name); // Logger mặc định của NestJS
+      private readonly loggerWinston = new WinstonLoggerService(); // Logger custom Winston
+
       constructor(
             @InjectRepository(Job)
             private readonly jobRepository: Repository<Job>,
@@ -51,7 +54,9 @@ export class JobService {
 
       async saveJobData(jobData: any): Promise<Job> {
             if (!jobData.company_name) {
-                  this.logger.error('Invalid input: company_name is missing')
+                  this.loggerWinston.error(
+                        `Invalid input: company_name is missing for jobId: ${jobData.job_Id}`
+                  );
                   throw new Error('Invalid input: company_name is missing');
             }
 
@@ -59,7 +64,7 @@ export class JobService {
             await queryRunner.startTransaction();
 
             try {
-                  this.logger.log(`Processing job data for job_Id: ${jobData.job_Id}`)
+                  this.loggerWinston.log(`Processing job data for job_Id: ${jobData.job_Id}`);
                   // Kiểm tra job_Id đã tồn tại hay chưa
                   const existingJob = await queryRunner.manager.findOne(Job, {
                         where: { jobId: jobData.job_Id },
@@ -67,6 +72,9 @@ export class JobService {
 
                   if (existingJob) {
                         // Nếu jobId đã tồn tại, không lưu job và trả về thông báo lỗi
+                        this.loggerWinston.warn(
+                              `Job with job_Id ${jobData.job_Id} already exists.`
+                        );
                         throw new Error(`Job with job_Id ${jobData.job_Id} already exists.`);
                   }
 
@@ -81,6 +89,9 @@ export class JobService {
                               name: jobData.company_name,
                         });
                         await queryRunner.manager.save(company);
+                        this.loggerWinston.info(
+                              `Company ${jobData.company_name} created for jobId: ${jobData.job_Id}`
+                        );
                   }
 
                   // Thực hiện lưu thông tin district
@@ -94,6 +105,9 @@ export class JobService {
                               name: jobData.district_name,
                         });
                         await queryRunner.manager.save(district);
+                        this.loggerWinston.info(
+                              `District ${jobData.district_name} created for jobId: ${jobData.job_Id}`
+                        );
                   }
 
                   // Thực hiện lưu thông tin WorkLocation
@@ -110,6 +124,9 @@ export class JobService {
                               company: company,
                         });
                         await queryRunner.manager.save(workLocation);
+                        this.loggerWinston.info(
+                              `WorkLocation created for jobId: ${jobData.job_Id}`
+                        );
                   }
 
                   let generalInformation = await queryRunner.manager.findOne(GeneralInformation, {
@@ -131,6 +148,9 @@ export class JobService {
                         generalInformation.numberOfRecruits = 0; // or any other update logic you need
                         generalInformation.gender = 'no pairing'; // update gender if needed
                         await queryRunner.manager.save(generalInformation); // update the record
+                        this.loggerWinston.info(
+                              `GeneralInformation created for jobId: ${jobData.job_Id}`
+                        );
                   }
 
                   // Lưu ImageCompany nếu chưa tồn tại
@@ -145,6 +165,9 @@ export class JobService {
                               image_company: jobData.image,
                         });
                         await queryRunner.manager.save(imageCompany);
+                        this.loggerWinston.info(
+                              `ImageCompany created for jobId: ${jobData.job_Id}`
+                        );
                   }
 
                   // Lấy thông tin jobIndustry, jobLevel, jobType nếu tồn tại
@@ -158,6 +181,7 @@ export class JobService {
                               name: jobData.job_industry,
                         });
                         await queryRunner.manager.save(jobIndustry);
+                        this.loggerWinston.info(`JobIndustry created for jobId: ${jobData.job_Id}`);
                   }
 
                   let jobLevel = await queryRunner.manager.findOne(JobLevel, {
@@ -170,6 +194,7 @@ export class JobService {
                               name: jobData.job_level,
                         });
                         await queryRunner.manager.save(jobLevel);
+                        this.loggerWinston.info(`JobLevel created for jobId: ${jobData.job_Id}`);
                   }
 
                   let jobType = await queryRunner.manager.findOne(JobType, {
@@ -183,6 +208,7 @@ export class JobService {
                               name: jobData.job_type,
                         });
                         await queryRunner.manager.save(jobType);
+                        this.loggerWinston.info(`JobType created for jobId: ${jobData.job_Id}`);
                   }
 
                   // Lưu RefJob nếu chưa tồn tại
@@ -196,6 +222,7 @@ export class JobService {
                               ref_url: jobData.ref_link,
                         });
                         await queryRunner.manager.save(refJob);
+                        this.loggerWinston.info(`RefJob created for jobId: ${jobData.job_Id}`);
                   }
 
                   const job = queryRunner.manager.create(Job, {
@@ -225,10 +252,17 @@ export class JobService {
 
                   await queryRunner.manager.save(job);
                   await queryRunner.commitTransaction();
+                  this.loggerWinston.info(
+                        `Job data saved successfully for jobId: ${jobData.job_Id}`
+                  );
 
                   return job;
             } catch (error) {
                   await queryRunner.rollbackTransaction();
+                  this.loggerWinston.error(
+                        `Error processing jobId: ${jobData.job_Id}, error: ${error.message}`,
+                        error.stack
+                  );
                   throw error;
             } finally {
                   await queryRunner.release();
@@ -237,7 +271,7 @@ export class JobService {
 
       async getAllJobs(): Promise<Job[]> {
             try {
-                  this.logger.log('Fetching all jobs with relations');
+                  this.loggerWinston.log('Fetching all jobs with relations');
                   return await this.jobRepository.find({
                         relations: [
                               'workLocation',
@@ -252,7 +286,10 @@ export class JobService {
                         ],
                   });
             } catch (error) {
-                  this.logger.error(`Error retrieving job details: ${error.message}`);
+                  this.loggerWinston.error(
+                        `Error retrieving job details: ${error.message}`,
+                        error.stack
+                  );
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }
       }
@@ -266,6 +303,7 @@ export class JobService {
                   jobTypesWorkAt: string[];
                   jobTypesName: string[];
                   jobDistrict: string[];
+                  jobDistrict_encode: string[]
             };
             jobs: Job[];
       }> {
@@ -291,6 +329,30 @@ export class JobService {
                   const jobTypesWorkAtSet = new Set<string>();
                   const jobTypesNameSet = new Set<string>();
                   const jobDistrictSet = new Set<string>();
+
+                  const hotJobs = jobs
+                        .filter((job) => job.Hot_Job !== 'Null')
+                        .sort(
+                              (a, b) =>
+                                    new Date(b.created_at).getTime() -
+                                    new Date(a.created_at).getTime()
+                        );
+
+                  const normalJobs = jobs
+                        .filter((job) => job.Hot_Job === 'Null')
+                        .sort(
+                              (a, b) =>
+                                    new Date(b.created_at).getTime() -
+                                    new Date(a.created_at).getTime()
+                        );
+
+                  // Sắp xếp các job bình thường 1 cách ngẫu nhiên
+                  // Arrange normal jobs randomly
+                  const shuffledNormal = normalJobs.sort(() => Math.random() - 0.5);
+
+                  // Gộp danh sách công việc lên đầu, sau đó là ngẫu nhiên
+                  // Merge to-do list to the top, then randomize
+                  const prioritizedJobs = [...hotJobs, ...shuffledNormal];
 
                   jobs.forEach((job) => {
                         // Tách và chuẩn hóa dữ liệu từ jobIndustry
@@ -357,6 +419,18 @@ export class JobService {
                                     districtNameParts[districtNameParts.length - 1].trim();
 
                               jobDistrictSet.add(cityName);
+
+                              // Tạo mã encode_arean
+                              const areaEncode = cityName
+                                    .normalize('NFD')
+                                    .replace(/[\u0300-\u036f]/g, '') // Xóa dấu tiếng Việt
+                                    .replace(/\s+/g, '') // Xóa khoảng trắng
+                                    .toLowerCase(); // Chuyển về chữ thường
+
+                              // Thêm encode_arean vào đối tượng district
+                              (
+                                    job.workLocation.district as District & { encode_arean: string }
+                              ).encode_arean = areaEncode;
                         }
                   });
 
@@ -408,6 +482,16 @@ export class JobService {
                               return uniqueDistricts;
                         }, []);
 
+                  // Tạo mảng mã hóa (encode)
+                  const jobDistrict_encode = jobDistrict.map(
+                        (district) =>
+                              district
+                                    .normalize('NFD') // Chuẩn hóa ký tự unicode
+                                    .replace(/[\u0300-\u036f]/g, '') // Loại bỏ dấu tiếng Việt
+                                    .replace(/\s+/g, '') // Xóa khoảng trắng
+                                    .toLowerCase() // Chuyển về chữ thường
+                  );
+
                   return {
                         category: {
                               jobLevels,
@@ -417,10 +501,13 @@ export class JobService {
                               jobTypesWorkAt,
                               jobTypesName,
                               jobDistrict,
+                              jobDistrict_encode,
                         },
-                        jobs: jobs,
+                        jobs: prioritizedJobs,
                   };
             } catch (error) {
+                  // throw new Error(`Error retrieving job details: ${error.message}`);
+                  Logger.error(`Error retrieving job details: ${error.message}`);
                   throw new Error(`Error retrieving job details: ${error.message}`);
             }
       }

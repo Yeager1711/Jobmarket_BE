@@ -7,6 +7,7 @@ import {
       CreateDateColumn,
       UpdateDateColumn,
       PrimaryColumn,
+      OneToMany,
 } from 'typeorm';
 import { JobLevel } from './job_level.entity';
 import { JobType } from './job_type.entity';
@@ -15,10 +16,11 @@ import { WorkLocation } from './work_location.entity';
 import { GeneralInformation } from './general_information.entity';
 import { Company } from './company.entity';
 import { RefJob } from './ref_job.entity';
+import { JobApplication } from './user_application.entity';
 
 @Entity('job')
 export class Job {
-      @PrimaryColumn({ default: 1 }) 
+      @PrimaryColumn({ default: 1 })
       jobId: number;
 
       @Column({ length: 255 })
@@ -77,8 +79,8 @@ export class Job {
       work_time: string;
 
       @Column({ default: 0, nullable: true })
-      view: number;    
-      
+      view: number;
+
       @Column({ nullable: true })
       Hot_Job: string;
 
@@ -87,4 +89,7 @@ export class Job {
 
       @UpdateDateColumn()
       updated_at: Date;
+
+      @OneToMany(() => JobApplication, (jobApplication) => jobApplication.job)
+      jobApplications: JobApplication[];
 }
