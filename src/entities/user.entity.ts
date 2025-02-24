@@ -44,6 +44,9 @@ export class User {
       @Column({ nullable: true })
       experienceLevel: string;
 
+      @Column({ nullable: true })
+      expectedSalary: number;
+
       @Column({ type: 'text', nullable: true })
       skills: string;
 

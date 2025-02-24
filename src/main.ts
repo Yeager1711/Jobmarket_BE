@@ -14,7 +14,7 @@ async function bootstrap() {
 
   // Cấu hình CORS
   app.enableCors({
-    origin: 'http://localhost:3000', // Cho phép frontend truy cập
+    origin: ['http://localhost:3000'], // Cho phép frontend truy cập
     credentials: true, // Cho phép gửi từ Cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Các phương thức được phép
     allowedHeaders: 'Content-Type, Authorization', // Các headers cho phép
@@ -22,7 +22,7 @@ async function bootstrap() {
 
   // Cấu hình phục vụ tệp tĩnh từ thư mục 'uploads'
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads', // URL có dạng http://localhost:5000/uploads/filename
+    prefix: '/uploads', 
   });
 
   // Tăng giới hạn kích thước request lên 10MB

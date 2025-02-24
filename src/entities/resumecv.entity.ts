@@ -22,7 +22,7 @@ export class ResumeCV {
     @Column({ type: 'longtext', nullable: false }) // Lưu ảnh Base64 hoặc URL
     CV_img: string;
 
-    @Column({ default: false }) // CV mặc định
+    @Column({type: 'boolean', default: false }) // CV mặc định
     isDefault: boolean;
 
     @Column({ default: 0 }) // Số lượt xem CV
