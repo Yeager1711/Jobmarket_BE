@@ -1,94 +1,253 @@
 import {
-      Controller,
-      Param,
-      Post,
-      Get,
-      Put,
-      Body,
-      UploadedFile,
-      UseInterceptors,
-      BadRequestException,
+        Controller,
+        Param,
+        Post,
+        Get,
+        Put,
+        Body,
+        Delete,
+        Res,
+        Req,
+        UploadedFile,
+        UseInterceptors,
+        BadRequestException,
+        HttpException,
+        HttpStatus,
+        UnauthorizedException,
+        ConflictException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
+import { Request, Response } from 'express';
+import { AuthMiddleware } from '../../../middlewares/auth/auth.middleware';
+import * as bcrypt from 'bcrypt';
 
 @Controller('users')
 export class UserController {
-      constructor(private readonly userService: UserService) {}
+        constructor(private readonly userService: UserService) {}
 
-      @Get(':userId')
-      async getUserbyId(@Param('userId') userId: number) {
-            return this.userService.getUserById(userId);
-      }
+        @Get('getUserId')
+        async getUserbyId(@Req() req: Request) {
+                const userId = (req as any).user?.userId; // Lấy userId từ access_token
+                if (!userId) {
+                        throw new UnauthorizedException(
+                                'Không tìm thấy thông tin user trong token'
+                        );
+                }
+                return this.userService.getUserById(userId);
+        }
 
-      @Post(':userId/upload-cv')
-      @UseInterceptors(
-            FileInterceptor('file', {
-                  storage: diskStorage({
-                        destination: './uploads/cvs', // Thư mục lưu trữ file
-                        filename: (req, file, cb) => {
-                              const uniqueSuffix =
-                                    Date.now() + '-' + Math.round(Math.random() * 1e9);
-                              cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-                        },
-                  }),
-            })
-      )
-      async uploadCV(
-            @Param('userId') userId: number,
-            @UploadedFile() file: Express.Multer.File,
-            @Body() body: { fileName: string } // Nhận `fileName` từ request body
-      ) {
-            if (!file || !body.fileName) {
-                  throw new BadRequestException('File hoặc tên file không hợp lệ');
-            }
+        @Post(':userId/upload-cv')
+        @UseInterceptors(
+                FileInterceptor('file', {
+                        storage: diskStorage({
+                                destination: './uploads/cvs', // Thư mục lưu trữ file
+                                filename: (req, file, cb) => {
+                                        const uniqueSuffix =
+                                                Date.now() + '-' + Math.round(Math.random() * 1e9);
+                                        cb(
+                                                null,
+                                                `${uniqueSuffix}${path.extname(file.originalname)}`
+                                        );
+                                },
+                        }),
+                })
+        )
+        async uploadCV(
+                @Param('userId') userId: number,
+                @UploadedFile() file: Express.Multer.File,
+                @Body() body: { fileName: string } // Nhận `fileName` từ request body
+        ) {
+                if (!file || !body.fileName) {
+                        throw new BadRequestException('File hoặc tên file không hợp lệ');
+                }
 
-            return this.userService.uploadResume(userId, body.fileName, file.filename);
-      }
+                return this.userService.uploadResume(userId, body.fileName, file.filename);
+        }
 
-      @Get('getCv/:userId')
-      async getCVbyUserId(@Param('userId') userId: number) {
-            return this.userService.getCVByUserId(userId);
-      }
+        @Get('getCv/:userId')
+        async getCVbyUserId(@Param('userId') userId: number) {
+                return this.userService.getCVByUserId(userId);
+        }
 
-      @Post('setDefaultCV/:userId/:resumeCVId')
-      async setDefaultCv(@Param('userId') userId: string, @Param('resumeCVId') resumeCVId: string) {
-            return this.userService.setDefaultCv(Number(userId), Number(resumeCVId));
-      }
+        @Put('setDefaultCV/:resumeCVId')
+        async setDefaultCv(@Param('resumeCVId') resumeCVId: number, @Req() req: Request) {
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                        throw new UnauthorizedException(
+                                'Không tìm thấy thông tin user trong token'
+                        );
+                }
+                const message = await this.userService.setDefaultCv(resumeCVId, userId);
+                return { message }; // Trả về object JSON
+        }
 
-      // Upload Image
-      @Post(':userId/upload-image')
-      @UseInterceptors(
-            FileInterceptor('file', {
-                  storage: diskStorage({
-                        destination: './uploads/images', // Thư mục lưu trữ ảnh đại diện
-                        filename: (req, file, cb) => {
-                              const uniqueSuffix =
-                                    Date.now() + '-' + Math.round(Math.random() * 1e9);
-                              cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-                        },
-                  }),
-            })
-      )
-      async uploadImage(
-            @Param('userId') userId: number,
-            @UploadedFile() file: Express.Multer.File
-      ) {
-            if (!file) {
-                  throw new BadRequestException('File không hợp lệ');
-            }
+        @Delete('deleteCV/:resumeCVId')
+        async deleteCV(@Param('resumeCVId') resumeCVId: number, @Req() req: Request) {
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                        throw new UnauthorizedException(
+                                'Không tìm thấy thông tin user trong token'
+                        );
+                }
+                return this.userService.deleteCV(userId, resumeCVId);
+        }
+        // Upload Image
+        @Post(':userId/upload-image')
+        @UseInterceptors(
+                FileInterceptor('file', {
+                        storage: diskStorage({
+                                destination: './uploads/images', // Thư mục lưu trữ ảnh đại diện
+                                filename: (req, file, cb) => {
+                                        const uniqueSuffix =
+                                                Date.now() + '-' + Math.round(Math.random() * 1e9);
+                                        cb(
+                                                null,
+                                                `${uniqueSuffix}${path.extname(file.originalname)}`
+                                        );
+                                },
+                        }),
+                })
+        )
+        async uploadImage(
+                @Param('userId') userId: number,
+                @UploadedFile() file: Express.Multer.File
+        ) {
+                if (!file) {
+                        throw new BadRequestException('File không hợp lệ');
+                }
 
-            return this.userService.uploadImage(userId, file.filename);
-      }
+                return this.userService.uploadImage(userId, file.filename);
+        }
 
-      @Put('updateProfile/:userId')
-      async updateProfile(@Param('userId') userId: number, @Body() updateData: any) {
-            if (!updateData || Object.keys(updateData).length === 0) {
-                  throw new BadRequestException('Dữ liệu cập nhật không hợp lệ');
-            }
+        @Put('updateProfile')
+        async updateProfile(@Req() req: Request, @Res() res: Response, @Body() body: any) {
+                const userId = (req as any).user?.userId;
+                console.log('userId', userId);
 
-            return this.userService.updateUserProfile(userId, updateData);
-      }
+                if (!userId) {
+                        return res.status(HttpStatus.UNAUTHORIZED).json({
+                                message: 'Unauthorized: User ID missing',
+                        });
+                }
+
+                try {
+                        const updatedUser = await this.userService.updateUserProfile(userId, body);
+                        return res.status(HttpStatus.OK).json({
+                                message: 'Cập nhật hồ sơ thành công!',
+                                user: updatedUser,
+                        });
+                } catch (error) {
+                        console.error('Lỗi cập nhật hồ sơ:', error);
+
+                        // Nếu lỗi là ConflictException (số điện thoại đã tồn tại)
+                        if (error.status === HttpStatus.CONFLICT) {
+                                return res.status(HttpStatus.CONFLICT).json({
+                                        message: 'Số điện thoại đã được sử dụng bởi người dùng khác',
+                                });
+                        }
+
+                        // Nếu lỗi khác, trả về 500
+                        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+                                message: 'Lỗi server',
+                        });
+                }
+        }
+
+        @Put('update-email')
+        async updateEmail(
+                @Req() req: Request,
+                @Body() body: { newEmail: string; currentPassword: string }
+        ) {
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                        throw new UnauthorizedException('Unauthorized: User ID missing');
+                }
+
+                const { newEmail, currentPassword } = body;
+                if (!newEmail || !currentPassword) {
+                        throw new BadRequestException(
+                                'Vui lòng cung cấp email mới và mật khẩu hiện tại'
+                        );
+                }
+
+                const updatedUser = await this.userService.updateEmail(
+                        userId,
+                        newEmail,
+                        currentPassword
+                );
+                return {
+                        message: 'Cập nhật email thành công',
+                        user: updatedUser,
+                };
+        }
+
+        @Put('change-password')
+        async changePassword(
+                @Req() req: Request,
+                @Body() body: { currentPassword: string; newPassword: string }
+        ) {
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                        throw new UnauthorizedException('Unauthorized: User ID missing');
+                }
+
+                const { newPassword, currentPassword } = body;
+                if (!newPassword || !currentPassword) {
+                        throw new BadRequestException(
+                                'Vui lòng cung cấp mật khẩu cũ hoặc mật khẩu mới'
+                        );
+                }
+
+                const changePaswword = await this.userService.changePassword(
+                        userId,
+                        newPassword,
+                        currentPassword
+                );
+
+                return {
+                        message: 'Thay đổi mật khẩu thành công',
+                        user: changePaswword,
+                };
+        }
+
+        //Chức năng xóa tài khoản
+        @Delete('deleteUserCurrent')
+        async deleteUser(@Req() req: Request, @Res() res: Response) {
+                const userId = (req as any).user?.userId;
+                console.log('userIDDĐ:', userId);
+                if (!userId) {
+                        throw new UnauthorizedException(
+                                'Không tìm thấy thông tin user trong token'
+                        );
+                }
+
+                try {
+                        await this.userService.deleteUserCurrent(userId);
+                        return res.status(HttpStatus.OK).json({
+                                message: 'Tài khoản và tất cả dữ liệu liên quan đã được xóa thành công',
+                        });
+                } catch (error) {
+                        console.error('Lỗi khi xóa tài khoản:', error);
+                        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+                                message: 'Lỗi server khi xóa tài khoản',
+                        });
+                }
+        }
+
+        @Post('compare-competitiveness/:jobId/:resumeCVId')
+        async compareCompetitiveness(@Param('jobId') jobId: number, @Param('resumeCVId') resumeCVId: number, @Req() req: Request) {
+                const authUserId = (req as any).user?.userId;
+                if (!authUserId) {
+                        throw new UnauthorizedException('Unauthorized: User ID missing in token');
+                }
+
+                const result = await this.userService.compareCompetitiveness(authUserId, jobId);
+                return {
+                        message: 'So sánh mức độ cạnh tranh thành công',
+                        data: result,
+                };
+        }
 }

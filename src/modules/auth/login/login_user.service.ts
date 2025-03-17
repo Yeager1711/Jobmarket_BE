@@ -34,12 +34,8 @@ export class AuthUserService {
 
             const payload = {
                   userId: user.userId,
-                  email: user.email,
-                  firstName: user.firstName,
-                  lastName: user.lastName,
-                  image: user.image,
             };
-            const accessToken = this.jwtService.sign(payload);
+            const accessToken = this.jwtService.sign(payload, { expiresIn: '30d' });
 
             return { accessToken };
       }

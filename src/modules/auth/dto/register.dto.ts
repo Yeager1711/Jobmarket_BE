@@ -14,4 +14,6 @@ export class RegisterDto {
     lastName?: string;
     phoneNumber?: string;
     address?: string;
+    expectedSalary: number;
+    nationality:string;
   }

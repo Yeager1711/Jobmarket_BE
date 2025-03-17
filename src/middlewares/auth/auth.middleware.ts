@@ -1,20 +1,30 @@
-import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
-import { NextFunction, Request, Response } from 'express';
-import { JwtService } from '@nestjs/jwt';
+import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+import * as jwt from 'jsonwebtoken';
 
+const jwtSecret = process.env.JWT_SECRET;
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
-    constructor(private readonly jwtService: JwtService) {}
-
-    use(req: Request, res: Response, next: NextFunction) {
-        const token = req.cookies?.token;
-        if (!token) throw new UnauthorizedException('Không có token');
-
-        try {
-            req.user = this.jwtService.verify(token);
-            next();
-        } catch (error) {
-            throw new UnauthorizedException('Token không hợp lệ');
+        use(req: Request, res: Response, next: NextFunction) {
+                const token = req.headers.authorization?.split(' ')[1];
+                console.log('access_token:', token);
+                if (!token) {
+                        console.log('❌ Không có token');
+                        return res.status(401).json({ message: 'Unauthorized: No token provided' });
+                }
+                try {
+                        const jwtSecret = process.env.JWT_SECRET || 'jobmarketJWTSECRET_KEYVALUES';
+                        const decoded = jwt.verify(token, jwtSecret) as { userId: string };
+                        console.log('✅ Token hợp lệ:', decoded);
+                        (req as any).user = decoded;
+                        next();
+                } catch (error) {
+                        console.error('❌ Lỗi xác minh token:', error.message);
+                        return res
+                                .status(401)
+                                .json({
+                                        message: `Unauthorized: Invalid token - ${error.message}`,
+                                });
+                }
         }
-    }
 }
