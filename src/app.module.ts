@@ -73,6 +73,11 @@ export class AppModule implements NestModule {
                         {
                                 path: 'users/compare-competitiveness/:jobId/:resumeCVId',
                                 method: RequestMethod.POST,
+                        },
+
+                        {
+                                path: 'users/Getcompare-competitiveness/:jobId/:resumeCVId',
+                                method: RequestMethod.GET,
                         }
                 );
         }

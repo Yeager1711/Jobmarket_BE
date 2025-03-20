@@ -15,7 +15,7 @@ export class AuthMiddleware implements NestMiddleware {
                 try {
                         const jwtSecret = process.env.JWT_SECRET || 'jobmarketJWTSECRET_KEYVALUES';
                         const decoded = jwt.verify(token, jwtSecret) as { userId: string };
-                        console.log('✅ Token hợp lệ:', decoded);
+                        // console.log('✅ Token hợp lệ:', decoded);
                         (req as any).user = decoded;
                         next();
                 } catch (error) {

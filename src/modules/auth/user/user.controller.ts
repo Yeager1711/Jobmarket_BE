@@ -5,6 +5,7 @@ import {
         Get,
         Put,
         Body,
+        Query,
         Delete,
         Res,
         Req,
@@ -15,6 +16,7 @@ import {
         HttpStatus,
         UnauthorizedException,
         ConflictException,
+        NotFoundException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -43,7 +45,10 @@ export class UserController {
         @UseInterceptors(
                 FileInterceptor('file', {
                         storage: diskStorage({
-                                destination: './uploads/cvs', // Thư mục lưu trữ file
+                                destination: (req, file, cb) => {
+                                        const uploadDir = path.join(process.cwd(), 'uploads/cvs');
+                                        cb(null, uploadDir);
+                                },
                                 filename: (req, file, cb) => {
                                         const uniqueSuffix =
                                                 Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -55,16 +60,16 @@ export class UserController {
                         }),
                 })
         )
-        async uploadCV(
-                @Param('userId') userId: number,
-                @UploadedFile() file: Express.Multer.File,
-                @Body() body: { fileName: string } // Nhận `fileName` từ request body
-        ) {
-                if (!file || !body.fileName) {
-                        throw new BadRequestException('File hoặc tên file không hợp lệ');
+        async uploadCV(@Param('userId') userId: string, @UploadedFile() file: Express.Multer.File) {
+                if (!file) {
+                        throw new BadRequestException('No file uploaded');
                 }
 
-                return this.userService.uploadResume(userId, body.fileName, file.filename);
+                const resume = await this.userService.uploadResume(parseInt(userId), file);
+                return {
+                        message: 'Upload CV thành công',
+                        data: resume,
+                };
         }
 
         @Get('getCv/:userId')
@@ -238,16 +243,47 @@ export class UserController {
         }
 
         @Post('compare-competitiveness/:jobId/:resumeCVId')
-        async compareCompetitiveness(@Param('jobId') jobId: number, @Param('resumeCVId') resumeCVId: number, @Req() req: Request) {
+        async compareCompetitiveness(
+                @Param('jobId') jobId: number,
+                @Param('resumeCVId') resumeCVId: number,
+                @Req() req: Request
+        ) {
                 const authUserId = (req as any).user?.userId;
                 if (!authUserId) {
                         throw new UnauthorizedException('Unauthorized: User ID missing in token');
                 }
 
-                const result = await this.userService.compareCompetitiveness(authUserId, jobId);
+                const result = await this.userService.compareCompetitiveness(
+                        authUserId,
+                        jobId,
+                        resumeCVId
+                );
                 return {
                         message: 'So sánh mức độ cạnh tranh thành công',
                         data: result,
                 };
+        }
+
+        @Get('Getcompare-competitiveness/:jobId/:resumeCVId')
+        async GetgetCompetitivenessAnalysis(
+                @Req() req: Request,
+                @Param('jobId') jobId: string,
+                @Param('resumeCVId') resumeCVId: string
+        ) {
+                const authUserId = (req as any).user?.userId;
+
+                if (!authUserId) {
+                        throw new UnauthorizedException('Unauthorized: User ID missing in token');
+                }
+
+                const order = await this.userService.getStoredAnalysis(
+                        authUserId,
+                        parseInt(jobId),
+                        parseInt(resumeCVId)
+                );
+                if (!order) {
+                        throw new NotFoundException('Analysis not found');
+                }
+                return { success: true, data: order };
         }
 }

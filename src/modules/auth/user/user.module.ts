@@ -8,10 +8,11 @@ import { AuthModule } from '../register/auth.module'; // Import AuthModule
 import { JobFavorite } from '../../../entities/job_favorite.entity'; // Import JobFavorite entity
 import { Job } from 'src/entities/job.entity';
 import { JobApplication } from '../../../entities/job_application.entity'; // Import JobApplication entity
+import { Order } from 'src/entities/order.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([User, ResumeCV, JobFavorite, JobApplication, Job]),
+        TypeOrmModule.forFeature([User, ResumeCV, JobFavorite, JobApplication, Job, Order]),
         AuthModule, 
     ],
     controllers: [UserController],
