@@ -24,11 +24,14 @@ import { diskStorage } from 'multer';
 import * as path from 'path';
 import { Request, Response } from 'express';
 import { AuthMiddleware } from '../../../middlewares/auth/auth.middleware';
-import * as bcrypt from 'bcrypt';
+import { PayOSService } from '../payment/payos/payos.service';
 
 @Controller('users')
 export class UserController {
-        constructor(private readonly userService: UserService) {}
+        constructor(
+                private readonly userService: UserService,
+                private readonly payosService: PayOSService
+        ) {}
 
         @Get('getUserId')
         async getUserbyId(@Req() req: Request) {
@@ -242,8 +245,9 @@ export class UserController {
                 }
         }
 
-        @Post('compare-competitiveness/:jobId/:resumeCVId')
-        async compareCompetitiveness(
+        // API mới để phân tích mức độ cạnh tranh
+        @Post('analyze-competitiveness/:jobId/:resumeCVId')
+        async analyzeCompetitiveness(
                 @Param('jobId') jobId: number,
                 @Param('resumeCVId') resumeCVId: number,
                 @Req() req: Request
@@ -253,37 +257,35 @@ export class UserController {
                         throw new UnauthorizedException('Unauthorized: User ID missing in token');
                 }
 
-                const result = await this.userService.compareCompetitiveness(
+                const result = await this.userService.analyzeCompetitiveness(
                         authUserId,
                         jobId,
                         resumeCVId
                 );
                 return {
-                        message: 'So sánh mức độ cạnh tranh thành công',
+                        message: 'Phân tích mức độ cạnh tranh thành công',
                         data: result,
                 };
         }
 
-        @Get('Getcompare-competitiveness/:jobId/:resumeCVId')
-        async GetgetCompetitivenessAnalysis(
-                @Req() req: Request,
-                @Param('jobId') jobId: string,
-                @Param('resumeCVId') resumeCVId: string
-        ) {
-                const authUserId = (req as any).user?.userId;
-
-                if (!authUserId) {
-                        throw new UnauthorizedException('Unauthorized: User ID missing in token');
+        
+        // API thanh toán Payos
+        @Post('create-payment-link')
+        async createPaymentLink(@Req() req: Request, @Body() body: any) {
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                        throw new UnauthorizedException(
+                                'Không tìm thấy thông tin user trong token'
+                        );
                 }
 
-                const order = await this.userService.getStoredAnalysis(
-                        authUserId,
-                        parseInt(jobId),
-                        parseInt(resumeCVId)
-                );
-                if (!order) {
-                        throw new NotFoundException('Analysis not found');
+                const { jobId, resumeCVId, totalAmount } = body;
+                if (!jobId || !resumeCVId || !totalAmount) {
+                        throw new BadRequestException(
+                                'Thiếu các trường bắt buộc: jobId, resumeCVId, totalAmount'
+                        );
                 }
-                return { success: true, data: order };
+
+                return this.payosService.createPaymentLink(userId, jobId, resumeCVId, totalAmount);
         }
 }
