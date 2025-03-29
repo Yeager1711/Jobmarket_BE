@@ -7,7 +7,7 @@ import { ResumeCV } from './resumecv.entity';
 @Entity('order')
 @Index(['orderId', 'userId', 'jobId', 'resumeId'], { unique: true })
 export class Order {
-        @PrimaryColumn() // Không tự tăng, tạo ngẫu nhiên
+        @PrimaryColumn()
         orderId: number;
 
         @ManyToOne(() => User, (user) => user.orders, { onDelete: 'CASCADE' })
@@ -43,11 +43,9 @@ export class Order {
         @Column({ type: 'text', nullable: true })
         analyze_text: string;
 
+        @Column()
+        disable: boolean;
+
         @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
         created_at: Date;
-
-        @BeforeInsert()
-        generateId() {
-                this.orderId = randomInt(1000000, 9999999); // Tạo số ngẫu nhiên 7 chữ số cho orderId
-        }
 }

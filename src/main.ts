@@ -16,7 +16,7 @@ async function bootstrap() {
   app.enableCors({
     origin: ['http://localhost:3000'], // Cho phép frontend truy cập
     credentials: true, // Cho phép gửi từ Cookies
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Các phương thức được phép
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Các phương thức được phép
     allowedHeaders: 'Content-Type, Authorization', // Các headers cho phép
   });
 

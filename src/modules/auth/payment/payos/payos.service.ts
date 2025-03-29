@@ -21,78 +21,99 @@ export class PayOSService {
                 );
         }
 
-        async createPaymentLink(userId: number, jobId: number, resumeId: number, totalAmount: number) {
+        async createPaymentLink(
+                userId: number,
+                jobId: number,
+                resumeId: number,
+                totalAmount: number
+        ) {
                 try {
-                    if (!userId || !jobId || !resumeId || !totalAmount) {
-                        console.error('Invalid input data:', { userId, jobId, resumeId, totalAmount });
-                        throw new BadRequestException('Missing required information for payment link creation');
-                    }
-            
-                    const orderCode = Date.now();
-                    console.log('Generated orderCode:', orderCode);
-            
-                    const user = await this.userService.getUserById(userId);
-                    if (!user || !user.email) {
-                        console.error('User or email not found:', user);
-                        throw new BadRequestException('User or email not found');
-                    }
-            
-                    const description = `AI Analytics #${jobId}`;
-                    if (description.length > 25) {
-                        throw new BadRequestException('Description exceeds 25 characters');
-                    }
-            
-                    const paymentData = {
-                        orderCode: orderCode,
-                        amount: totalAmount,
-                        description: description,
-                        returnUrl: `http://localhost:3000/Auth/User/chatAI/result/payment/success?orderCode=${orderCode}&jobId=${jobId}&resumeCVId=${resumeId}`,
-                        cancelUrl: 'http://localhost:3000/payment/cancel',
-                        buyerEmail: user.email,
-                        items: [
-                            {
-                                name: `AI Analytics #${jobId}`,
-                                quantity: 1,
-                                price: totalAmount,
-                            },
-                        ],
-                    };
-                    console.log('Payment data:', paymentData);
-            
-                    const paymentLinkResponse = await this.payos.createPaymentLink(paymentData);
-                    console.log('Payment link response:', paymentLinkResponse);
-            
-                    const order = this.orderRepository.create({
-                        userId,
-                        jobId,
-                        resumeId,
-                        totalAmount,
-                        orderCode: orderCode.toString(),
-                        status: 'PENDING',
-                        created_at: new Date(),
-                    });
-                    await this.orderRepository.save(order);
-                    console.log('Order saved:', order);
-            
-                    setTimeout(async () => {
-                        await this.checkPaymentStatus(orderCode.toString());
-                    }, 10 * 60 * 1000);
-            
-                    return {
-                        checkoutUrl: paymentLinkResponse.checkoutUrl,
-                        orderCode: paymentLinkResponse.orderCode,
-                    };
-                } catch (error) {
-                    console.error('Error creating payment link:', error.message, error.stack);
-                    if (error.response && error.response.data) {
-                        console.error('PayOS response error:', error.response.data);
-                        throw new BadRequestException(
-                            error.response.data.message || 'Unable to create payment link due to PayOS error'
+                        if (!userId || !jobId || !resumeId || !totalAmount) {
+                                console.error('Invalid input data:', {
+                                        userId,
+                                        jobId,
+                                        resumeId,
+                                        totalAmount,
+                                });
+                                throw new BadRequestException(
+                                        'Missing required information for payment link creation'
+                                );
+                        }
+
+                        const orderCode = Date.now(); // Là số
+                        console.log('Generated orderCode:', orderCode);
+
+                        const user = await this.userService.getUserById(userId);
+                        if (!user || !user.email) {
+                                console.error('User or email not found:', user);
+                                throw new BadRequestException('User or email not found');
+                        }
+
+                        const description = `AI Analytics #${jobId}`;
+                        if (description.length > 25) {
+                                throw new BadRequestException('Description exceeds 25 characters');
+                        }
+
+                        // Gán orderCode vào orderId khi tạo order
+                        const order = this.orderRepository.create({
+                                orderId: orderCode, // Gán orderCode vào orderId
+                                userId,
+                                jobId,
+                                resumeId,
+                                totalAmount,
+                                orderCode: orderCode.toString(), // Lưu orderCode dưới dạng string nếu cần
+                                status: 'PENDING',
+                                created_at: new Date(),
+                        });
+                        const savedOrder = await this.orderRepository.save(order);
+                        console.log('Order saved:', savedOrder);
+
+                        const paymentData = {
+                                orderCode: orderCode, // PayOS yêu cầu orderCode là số
+                                amount: totalAmount,
+                                description: description,
+                                returnUrl: `http://localhost:3000/Auth/User/chatAI/result/payment/success?orderId=${savedOrder.orderId}&jobId=${jobId}&resumeCVId=${resumeId}`,
+                                cancelUrl: 'http://localhost:3000/payment/cancel',
+                                buyerEmail: user.email,
+                                items: [
+                                        {
+                                                name: `AI Analytics #${jobId}`,
+                                                quantity: 1,
+                                                price: totalAmount,
+                                        },
+                                ],
+                        };
+                        console.log('Payment data:', paymentData);
+
+                        const paymentLinkResponse = await this.payos.createPaymentLink(paymentData);
+                        console.log('Payment link response:', paymentLinkResponse);
+
+                        setTimeout(
+                                async () => {
+                                        await this.checkPaymentStatus(orderCode.toString());
+                                },
+                                10 * 60 * 1000
                         );
-                    }
-                    throw new BadRequestException(error.message || 'Unable to create payment link');
+
+                        return {
+                                checkoutUrl: paymentLinkResponse.checkoutUrl,
+                                orderCode: paymentLinkResponse.orderCode,
+                                orderId: savedOrder.orderId,
+                        };
+                } catch (error) {
+                        console.error('Error creating payment link:', error.message, error.stack);
+                        if (error.response && error.response.data) {
+                                console.error('PayOS response error:', error.response.data);
+                                throw new BadRequestException(
+                                        error.response.data.message ||
+                                                'Unable to create payment link due to PayOS error'
+                                );
+                        }
+                        throw new BadRequestException(
+                                error.message || 'Unable to create payment link'
+                        );
                 }
-            }
+        }
 
         async handleWebhook(webhookData: any) {
                 try {

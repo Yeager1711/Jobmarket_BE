@@ -246,21 +246,30 @@ export class UserController {
         }
 
         // API mới để phân tích mức độ cạnh tranh
-        @Post('analyze-competitiveness/:jobId/:resumeCVId')
+        @Post('analyze-competitiveness/:orderId/:jobId/:resumeCVId')
         async analyzeCompetitiveness(
+                @Param('orderId') orderId: number,
                 @Param('jobId') jobId: number,
                 @Param('resumeCVId') resumeCVId: number,
                 @Req() req: Request
         ) {
+                console.log(
+                        `[analyzeCompetitiveness] Received request: orderId=${orderId}, jobId=${jobId}, resumeCVId=${resumeCVId}`
+                );
                 const authUserId = (req as any).user?.userId;
                 if (!authUserId) {
                         throw new UnauthorizedException('Unauthorized: User ID missing in token');
                 }
 
+                if (!orderId || orderId <= 0) {
+                        throw new BadRequestException('Order ID không hợp lệ hoặc thiếu');
+                }
+
                 const result = await this.userService.analyzeCompetitiveness(
                         authUserId,
                         jobId,
-                        resumeCVId
+                        resumeCVId,
+                        orderId
                 );
                 return {
                         message: 'Phân tích mức độ cạnh tranh thành công',
@@ -268,7 +277,6 @@ export class UserController {
                 };
         }
 
-        
         // API thanh toán Payos
         @Post('create-payment-link')
         async createPaymentLink(@Req() req: Request, @Body() body: any) {

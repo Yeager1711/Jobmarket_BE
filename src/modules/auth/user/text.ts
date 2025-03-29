@@ -1,3 +1,4 @@
+// UserService.ts
 import {
     BadRequestException,
     Injectable,
@@ -27,10 +28,10 @@ export class UserService {
             @InjectRepository(ResumeCV)
             private readonly resumeRepository: Repository<ResumeCV>,
 
-            @InjectRepository(JobFavorite) // Repository cho job_favorite
+            @InjectRepository(JobFavorite)
             private readonly jobFavoriteRepository: Repository<JobFavorite>,
 
-            @InjectRepository(JobApplication) // Repository cho job_application
+            @InjectRepository(JobApplication)
             private readonly jobApplicationRepository: Repository<JobApplication>,
 
             @InjectRepository(Job)
@@ -39,7 +40,7 @@ export class UserService {
             @InjectRepository(Order)
             private readonly orderRepository: Repository<Order>
     ) {
-            //Khởi tạo api key với Genimi
+            // Khởi tạo API key với Gemini
             const apiKeyGenimi =
                     process.env.GEMINI_API_KEY || 'AIzaSyAVmDicVH0w6erDKRaszQSIj-NYAznmDnE';
             if (!apiKeyGenimi) {
@@ -128,7 +129,7 @@ export class UserService {
                     }
             });
 
-            //Kiểm tra người dùng đã cập nhật CV chưa
+            // Kiểm tra người dùng đã cập nhật CV chưa
             if (hasResumeCV) {
                     completedFields++;
             }
@@ -197,12 +198,12 @@ export class UserService {
                     order: { updatedAt: 'ASC' }, // Sắp xếp từ sớm nhất đến trễ nhất
             });
 
-            //Chuyển đổi updateAt  thành Date nếu cần
+            // Chuyển đổi updateAt thành Date nếu cần
             cvList.forEach((cv) => {
                     cv.updatedAt = new Date(cv.updatedAt);
             });
 
-            //Sắp xếp
+            // Sắp xếp
             cvList.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
             return cvList;
@@ -346,7 +347,7 @@ export class UserService {
             return updatedUser;
     }
 
-    //Change password user
+    // Change password user
     async changePassword(
             userId: number,
             newPassword: string,
@@ -382,7 +383,7 @@ export class UserService {
                     throw new BadRequestException('Mật khẩu hiện tại không đúng');
             }
 
-            //Kiểm tra mật khẩu mới có trùng với mật khẩu hiện tại không
+            // Kiểm tra mật khẩu mới có trùng với mật khẩu hiện tại không
             const isSameAsOldPassword = await bcrypt.compare(newPassword, user.password);
             if (isSameAsOldPassword) {
                     throw new BadRequestException(
@@ -405,8 +406,7 @@ export class UserService {
             return updatedUser;
     }
 
-    //Chức năng xóa user hiện tại trên tài khoản
-    // UserService.ts (phiên bản tối ưu với onDelete: CASCADE)
+    // Chức năng xóa user hiện tại trên tài khoản
     async deleteUserCurrent(userId: number): Promise<void> {
             const queryRunner = this.userRepository.manager.connection.createQueryRunner();
             await queryRunner.connect();
@@ -452,7 +452,7 @@ export class UserService {
             }
     }
 
-    // AI GENIMI
+    // AI GEMINI
     async listAvailableModels(): Promise<void> {
             try {
                     const response = await fetch(
@@ -469,6 +469,54 @@ export class UserService {
             } catch (error) {
                     console.error('[GoogleGenerativeAI] Error listing models:', error.message);
             }
+    }
+
+    // Hàm mới để phân tích mức độ cạnh tranh
+    async analyzeCompetitiveness(
+            userId: number,
+            jobId: number,
+            resumeCVId: number
+    ): Promise<string> {
+            console.log(
+                    `[analyzeCompetitiveness] Starting for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+            );
+
+            // 1. Kiểm tra xem dữ liệu phân tích đã tồn tại trong DB chưa
+            let order = await this.orderRepository.findOne({
+                    where: { userId, jobId, resumeId: resumeCVId },
+            });
+
+            if (order && order.analyze_text) {
+                    console.log(
+                            `[analyzeCompetitiveness] Found existing analysis in DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+                    );
+                    return order.analyze_text; // Trả về dữ liệu đã có trong DB
+            }
+
+            // 2. Nếu không có dữ liệu, gọi hàm compareCompetitiveness để tạo mới
+            console.log(
+                    `[analyzeCompetitiveness] No existing analysis found, generating new analysis for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+            );
+            const analysisResult = await this.compareCompetitiveness(userId, jobId, resumeCVId);
+
+            // 3. Lưu kết quả vào DB
+            if (!order) {
+                    order = this.orderRepository.create({
+                            userId,
+                            jobId,
+                            resumeId: resumeCVId,
+                            analyze_text: analysisResult,
+                    });
+            } else {
+                    order.analyze_text = analysisResult;
+            }
+
+            await this.orderRepository.save(order);
+            console.log(
+                    `[analyzeCompetitiveness] Saved new analysis to DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+            );
+
+            return analysisResult;
     }
 
     async compareCompetitiveness(
@@ -498,7 +546,6 @@ export class UserService {
                     `[compareCompetitiveness] Found User: ${user.firstName} ${user.lastName}, Job: ${job.title}`
             );
 
-            // Lấy CV dựa trên resumeCVId thay vì tìm CV mặc định
             const selectedCV = await this.resumeRepository.findOne({
                     where: { resumeCVId, user: { userId } },
             });
@@ -509,7 +556,6 @@ export class UserService {
                     throw new NotFoundException('Selected CV not found');
             }
 
-            // Lấy nội dung CV từ selectedCV
             const cvContent = await this.parseCVContent(selectedCV.CV_img);
             if (!cvContent) {
                     console.log(
@@ -526,8 +572,7 @@ export class UserService {
             });
             const totalApplicants = applications.length;
 
-            // Kiểm tra hồ sơ có hợp lệ không (tùy chọn, nếu cần)
-            const isProfileValid = !!cvContent; // Nếu có nội dung CV thì coi là hợp lệ
+            const isProfileValid = !!cvContent;
             if (!isProfileValid) {
                     throw new BadRequestException(
                             `Hey ${user.firstName} ${user.lastName}! CV của bạn không chứa thông tin hợp lệ để phân tích.`
@@ -547,68 +592,138 @@ export class UserService {
                                     app.user.jobTitle || 'Không có thông tin vị trí mong muốn',
                     }));
 
-            // Tách câu đầu ra khỏi introPrompt
-            const introGreeting = `Chào bạn! Mình là AI của JobMarket, mình sẽ giúp ${user.firstName} ${user.lastName} so sánh mức độ cạnh tranh với các ứng viên khác cho công việc "${job.title}".`;
+            const introGreeting = `**Chào bạn! Mình là AI của JobMarket, mình sẽ giúp ${user.firstName} ${user.lastName} so sánh mức độ cạnh tranh với các ứng viên khác cho công việc "${job.title}".`;
+
             const introContent = `
-              Thông tin CV của ${user.firstName} ${user.lastName}:
-              ${cvContent}
-              
-              Yêu cầu công việc:
-              ${job.requirement}
-              
-              Thông tin các ứng viên khác (tổng cộng ${totalApplicants} người):
-              ${otherApplicantsInfo
-                      .map(
-                              (applicant, index) => `Ứng viên ${index + 1}: ${applicant.name}
-              - Kỹ năng: ${applicant.skills}
-              - Kinh nghiệm: ${applicant.experienceLevel}
-              - Học vấn: ${applicant.education}
-              - Vị trí mong muốn: ${applicant.jobTitle}`
-                      )
-                      .join('\n\n')}
-            `;
+            Yêu cầu công việc:
+            ${job.requirement}
+            
+            Thông tin các ứng viên khác (tổng cộng ${totalApplicants} người):
+            ${otherApplicantsInfo
+                    .map(
+                            (applicant, index) => `Ứng viên ${index + 1}: ${applicant.name}
+            - Kỹ năng: ${applicant.skills}
+            - Kinh nghiệm: ${applicant.experienceLevel}
+            - Học vấn: ${applicant.education}
+            - Vị trí mong muốn: ${applicant.jobTitle}`
+                    )
+                    .join('\n\n')}
+        `;
 
             const introPrompt = `${introGreeting}\n\n${introContent}`;
 
             const analysisPrompt = `
-            Hãy phân tích và trả về kết quả theo cấu trúc sau, đảm bảo phản hồi chi tiết, ít nhất 700-800 ký tự:
+            Hãy phân tích mức độ cạnh tranh của ứng viên dựa trên thông tin CV, yêu cầu công việc và dữ liệu từ các ứng viên khác đã ứng tuyển. Trả lời bằng tiếng Việt, sử dụng giọng điệu thân thiện, chuyên nghiệp và chi tiết. Đảm bảo phản hồi có độ dài tối thiểu 2000 ký tự để cung cấp phân tích sâu sắc, không bỏ sót bất kỳ khía cạnh nào. Dưới đây là thông tin chi tiết để phân tích:
             
-            1. Đánh giá mức độ phù hợp của ${user.firstName} ${user.lastName}:  
-            - Mức độ phù hợp với công việc: 70%, Huỳnh Nam có kiến thức cơ bản về Frontend (HTML, CSS, JavaScript, Vue.js, React.js, SCSS) và Backend (Node.js, RESTful API). Kinh nghiệm thực tế thông qua các dự án cá nhân và thực tập cho thấy khả năng áp dụng kiến thức vào thực tế. Tuy nhiên, kinh nghiệm còn hạn chế và chưa có dự án nào hoàn toàn sử dụng Vue.js (yêu cầu chính của công việc).  
-            - So sánh với ứng viên đã ứng tuyển khác: Xếp hạng Huỳnh Nam ở vị trí thứ 2 trong 3 ứng viên. Mai Trúc Phan và Nguyễn Gia Huy chỉ cung cấp thông tin rất sơ lược về kỹ năng và kinh nghiệm, khó đánh giá chính xác năng lực. Huỳnh Nam nổi bật hơn nhờ cung cấp thông tin chi tiết về dự án và kỹ năng, mặc dù chưa hoàn toàn đáp ứng yêu cầu công việc.  
-            - Mức lương thị trường đang trả: Ước lượng 7000 - 12000 USD/năm cho vị trí Fresher Frontend Engineer tại TP.HCM. Mức lương cụ thể phụ thuộc vào kỹ năng, kinh nghiệm thực tế và khả năng đàm phán. Thị trường Frontend Engineer tại Việt Nam đang phát triển mạnh mẽ, nhu cầu nhân lực cao dẫn đến mức lương cạnh tranh.  
+            ---
             
-            2. So sánh mức độ cạnh tranh:  
-            - Có kinh nghiệm thực tế thông qua 2 dự án cá nhân (website bán cây cảnh và website đặt vé xem phim) và 1 thời gian thực tập tại DATVIETSOFTWARE  
-            - Có nền tảng [Fresher] FRONTEND ENGINEER, đang là sinh viên chuyên ngành CNTT tại Hutech University và có kinh nghiệm thực tế với các dự án Frontend  
-            - Có khả năng [Fresher] FRONTEND ENGINEER, đã thực hiện các dự án sử dụng HTML, CSS, JavaScript, React.js và Vue.js  
-            - Thiếu thông tin về các kỹ năng mà [Fresher] FRONTEND ENGINEER cần, không có thông tin về kỹ năng mềm như giao tiếp, làm việc nhóm, và quy trình phát triển phần mềm (Agile, Scrum)  
-            - Có kỹ năng tựa [Fresher] FRONTEND ENGINEER cần, có kinh nghiệm với React.js, Vue.js và REST API, phù hợp với một số yêu cầu của công việc  
+            ### Thông tin đầu vào
+            1. **Thông tin CV của ứng viên**:
+            - Họ tên: ${user.firstName} ${user.lastName}
+            - Nội dung CV: ${cvContent}
+            - Kỹ năng công nghệ: <key>HTML</key>, <key>CSS</key>, <key>JavaScript</key>, <key>React.js</key>, <key>Vue.js</key>, <key>REST API</key>.
+            - Dự án cá nhân:
+                    - <key>Website bán cây cảnh</key>: Phát triển giao diện người dùng bằng <key>React.js</key>, tích hợp <key>REST API</key> để hiển thị sản phẩm, tối ưu hóa tốc độ tải trang.
+                    - <key>Website đặt vé xem phim</key>: Sử dụng <key>Vue.js</key>, thiết kế responsive, tích hợp thanh toán qua API bên thứ ba.
+            - Kinh nghiệm thực tế:
+                    - Thực tập tại <key>DATVIETSOFTWARE</key> (3 tháng): Hỗ trợ phát triển giao diện Frontend, làm việc với <key>React.js</key> và <key>REST API</key>, tham gia nhóm 5 người.
+            - Học vấn: Sinh viên năm 4, chuyên ngành Công nghệ Thông tin, <key>Đại học HUTECH</key>.
+            - Kỹ năng mềm: Không có thông tin cụ thể về <key>giao tiếp</key>, <key>làm việc nhóm</key>, hoặc quy trình phát triển phần mềm (<key>Agile/Scrum</key>).
+            - Chứng chỉ: Không có chứng chỉ liên quan đến lập trình hoặc Frontend.
             
-            3. Học vấn:  
-            - Có nền tảng [Fresher] FRONTEND ENGINEER, đang học chuyên ngành Công nghệ Thông tin tại Đại học HUTECH  
-            - Không có chứng chỉ liên quan đến lập trình hoặc Frontend  
+            2. **Yêu cầu công việc**:
+            - Tiêu đề: ${job.title}
+            - Kỹ năng bắt buộc: <key>HTML</key>, <key>CSS</key>, <key>JavaScript</key>, <key>React.js</key> hoặc <key>Vue.js</key>, hiểu biết cơ bản về <key>REST API</key>.
+            - Kỹ năng ưu tiên: Kinh nghiệm với quy trình <key>Agile/Scrum</key>, <key>làm việc nhóm</key>, <key>giao tiếp</key> tốt với team backend.
+            - Kinh nghiệm: 0-1 năm (Fresher), ưu tiên ứng viên có dự án thực tế hoặc thực tập.
+            - Học vấn: Tốt nghiệp hoặc đang học CNTT hoặc ngành liên quan.
+            - Mức lương đề xuất: $12,000 - $18,000/năm (tùy kinh nghiệm và kỹ năng).
             
-            4. Phân tích kinh nghiệm:  
-            - Có nền tảng với lĩnh vực đang ứng tuyển, đã thực hiện các dự án liên quan đến Frontend và thực tập tại DATVIETSOFTWARE  
-            - Không có chứng chỉ liên quan đến lập trình hoặc Frontend  
-            - Có kỹ năng công nghệ nổi bật, có kinh nghiệm với React.js, Vue.js và REST API  
+            3. **Thông tin các ứng viên khác** (tổng cộng ${totalApplicants - 1} ứng viên khác):
+            ${otherApplicantsInfo
+                    .map(
+                            (applicant, index) => `
+            - Ứng viên ${index + 1}: ${applicant.name}
+                    - Kỹ năng: ${applicant.skills}
+                    - Kinh nghiệm: ${applicant.experienceLevel}
+                    - Học vấn: ${applicant.education}
+                    - Kỹ năng mềm: Không có thông tin cụ thể trừ khi được đề cập trong kinh nghiệm hoặc học vấn.
+            `
+                    )
+                    .join('\n')}
             
-            5. Gợi ý cải thiện:  
-            - Tập trung vào Vue.js: Nắm vững Vue.js và thực hiện thêm các dự án cá nhân sử dụng framework này  
-            - Xây dựng Portfolio mạnh mẽ: Tạo một portfolio trực tuyến ấn tượng, thể hiện rõ các dự án đã làm, đặc biệt là những dự án sử dụng Vue.js  
-            - Cải thiện kỹ năng giao tiếp: Nâng cao khả năng giao tiếp bằng tiếng Anh (ít nhất đạt trình độ B2 trở lên) và trình bày ý tưởng, kỹ năng một cách rõ ràng, mạch lạc  
-            - Tham gia các cộng đồng lập trình: Tham gia các cộng đồng, nhóm lập trình để học hỏi kinh nghiệm và mở rộng network  
-            - Làm thêm các dự án cá nhân: Thực hiện thêm các dự án cá nhân để tích lũy kinh nghiệm và chứng minh khả năng  
+            ---
             
-            6. Xếp hạng chung:  
-            - Ứng viên chưa rõ thông tin (nếu có thêm thông tin chi tiết, có thể thay đổi): Thiếu thông tin cụ thể nên chưa thể đánh giá  
-            - Huỳnh Nam: Có kinh nghiệm thực tế và kiến thức cơ bản tốt, nhưng cần cải thiện kỹ năng Vue.js và xây dựng portfolio  
-            - Ứng viên chưa rõ thông tin (nếu có thêm thông tin chi tiết, có thể thay đổi): Thiếu thông tin cụ thể nên chưa thể đánh giá  
+            ### Yêu cầu phân tích
+            Hãy phân tích và trả về kết quả theo cấu trúc cố định dưới đây. Đảm bảo mỗi phần được giải thích chi tiết, đưa ra số liệu phần trăm (%) cụ thể cho các mục chính: "Mức độ phù hợp với công việc", "Điểm mạnh kỹ thuật", "Kinh nghiệm thực tế", và "Học vấn". Các con số phần trăm phải được phân tích kỹ lưỡng dựa trên dữ liệu CV, yêu cầu công việc, và so sánh với các ứng viên khác, thể hiện tính rõ ràng và bám sát mức độ cạnh tranh. "Mức độ phù hợp với công việc" được tính bằng trung bình cộng của 7 mục: "Điểm mạnh kỹ thuật", "Điểm mạnh kinh nghiệm", "Điểm mạnh kỹ năng mềm", "Học vấn", "Kinh nghiệm thực tế", "So sánh với yêu cầu", và "So sánh với ứng viên khác". Không sử dụng dấu [] trong phần giải thích, giữ nguyên các thẻ <key> cho từ khóa quan trọng, và cung cấp lý do ngắn gọn dựa trên dữ liệu.
             
-            Kết luận:  
-            Huỳnh Nam có tiềm năng trở thành một Frontend Engineer. Tuy nhiên, để tăng khả năng cạnh tranh, anh cần tập trung vào việc nâng cao kỹ năng Vue.js, xây dựng một portfolio ấn tượng, và cải thiện khả năng giao tiếp. Chúc Huỳnh Nam thành công trong quá trình tìm việc  
-          `;
+            ---
+            
+            ## 1. Đánh giá mức độ phù hợp của ${user.firstName} ${user.lastName}
+            - **Mức độ phù hợp với công việc**: X%  
+            Giải thích chi tiết: Trung bình cộng của <key>Điểm mạnh kỹ thuật</key>, <key>Điểm mạnh kinh nghiệm</key>, <key>Điểm mạnh kỹ năng mềm</key>, <key>Học vấn</key>, <key>Kinh nghiệm thực tế</key>, <key>So sánh với yêu cầu</key>, và <key>So sánh với ứng viên khác</key>, phản ánh khả năng tổng thể đáp ứng công việc dựa trên CV và yêu cầu.  
+            - **So sánh với ứng viên khác**: Xếp hạng X/${totalApplicants}  
+            Giải thích: So sánh tổng thể với các ứng viên khác dựa trên kỹ năng và kinh nghiệm thực tế.  
+            - **Mức lương thị trường**: $X - $Y/năm  
+            Phân tích: Ước lượng dựa trên kinh nghiệm tại <key>DATVIETSOFTWARE</key>, dự án cá nhân, và mức lương ngành.  
+            
+            ## 2. So sánh mức độ cạnh tranh
+            - **Điểm mạnh kỹ thuật**: X%  
+            Phân tích: Đánh giá mức độ thành thạo <key>HTML</key>, <key>CSS</key>, <key>JavaScript</key>, <key>React.js</key>, <key>Vue.js</key>, <key>REST API</key> so với yêu cầu công việc và các ứng viên khác.  
+            - **Điểm yếu kỹ thuật**:  
+            Phân tích các kỹ năng còn thiếu như <key>Agile/Scrum</key> so với yêu cầu công việc.  
+            - **Điểm mạnh kinh nghiệm**: X%  
+            Phân tích: Đánh giá kinh nghiệm thực tế tại <key>DATVIETSOFTWARE</key> và dự án <key>Website bán cây cảnh</key>, <key>Website đặt vé xem phim</key> so với yêu cầu.  
+            - **Điểm yếu kinh nghiệm**:  
+            Phân tích thời gian kinh nghiệm và mức độ liên quan so với yêu cầu tối đa 1 năm.  
+            - **Điểm mạnh kỹ năng mềm**: X%  
+            Phân tích khả năng <key>giao tiếp</key>, <key>làm việc nhóm</key> dựa trên thông tin CV và yêu cầu công việc.  
+            - **Điểm yếu kỹ năng mềm**:  
+            Phân tích sự thiếu hụt thông tin về <key>kỹ năng mềm</key> so với yêu cầu.  
+            
+            ## 3. Học vấn
+            - **Học vấn**: X%  
+            Phân tích: Đánh giá nền tảng học vấn tại <key>Đại học HUTECH</key> và sự phù hợp với yêu cầu công việc, so sánh với các ứng viên khác.  
+            - **Chứng chỉ và khóa học**:  
+            Phân tích sự thiếu hụt chứng chỉ liên quan đến lập trình so với yêu cầu.  
+            - **Tiềm năng phát triển**:  
+            Dự đoán khả năng học hỏi dựa trên học vấn và dự án cá nhân.  
+            
+            ## 4. Phân tích kinh nghiệm
+            - **Kinh nghiệm thực tế**: X%  
+            Phân tích: Đánh giá thực tập tại <key>DATVIETSOFTWARE</key> và dự án <key>Website bán cây cảnh</key>, <key>Website đặt vé xem phim</key> so với yêu cầu công việc.  
+            - **So sánh với yêu cầu**: X%  
+            Phân tích: Đánh giá kinh nghiệm thực tế so với yêu cầu 0-1 năm và các kỹ năng ưu tiên.  
+            - **So sánh với ứng viên khác**: X%  
+            Phân tích: So sánh kinh nghiệm thực tế với các ứng viên khác dựa trên mức độ liên quan và thời gian.  
+            
+            ## 5. Gợi ý cải thiện
+            1. Bổ sung <key>kỹ năng mềm</key> vào CV - Tăng khả năng <key>giao tiếp</key> và <key>làm việc nhóm</key>.  
+            2. Học <key>Agile/Scrum</key> - Đáp ứng yêu cầu kỹ thuật đầy đủ hơn.  
+            3. Chi tiết hóa dự án cá nhân - Thể hiện rõ năng lực trong CV.  
+            4. Làm thêm dự án freelance - Tích lũy thêm kinh nghiệm thực tế.  
+            5. Tạo portfolio online - Showcase kỹ năng để gây ấn tượng.  
+            6. Chuẩn bị kỹ lưỡng cho phỏng vấn - Tăng cơ hội thể hiện bản thân.  
+            7. Lấy chứng chỉ <key>React.js</key> hoặc <key>Vue.js</key> - Nâng cao học vấn và uy tín.  
+            
+            ## 6. Xếp hạng chung
+            - **Danh sách xếp hạng**:  
+            1. ${user.firstName} ${user.lastName} - Kỹ năng lập trình tốt, kinh nghiệm thực tế.  
+            2. [Tên ứng viên 2] - Thiếu kỹ năng lập trình cụ thể.  
+            ...  
+            
+            ## 7. Kết luận
+            - **Lời khuyên chi tiết**: Hãy tập trung bổ sung <key>kỹ năng mềm</key> và học <key>Agile/Scrum</key> để tăng cơ hội trúng tuyển.  
+            - **Lời chúc động viên**: Chúc bạn sớm đạt được công việc mơ ước với sự nỗ lực của mình!  
+            
+            ---
+            
+            ### Hướng dẫn bổ sung
+            - Giữ nguyên các thẻ <key> cho từ khóa quan trọng như <key>HTML</key>, <key>DATVIETSOFTWARE</key>, <key>Đại học HUTECH</key>.
+            - Tất cả phần trăm phải được phân tích cụ thể dựa trên dữ liệu CV, yêu cầu công việc, và so sánh với ứng viên khác, không đưa ra số liệu chung chung.
+            - "Mức độ phù hợp với công việc" là trung bình cộng của 7 mục: "Điểm mạnh kỹ thuật", "Điểm mạnh kinh nghiệm", "Điểm mạnh kỹ năng mềm", "Học vấn", "Kinh nghiệm thực tế", "So sánh với yêu cầu", "So sánh với ứng viên khác".
+            - Giọng điệu thân thiện, như một người cố vấn.
+        `;
 
             const prompt = `${introPrompt}\n\n---\n\n${analysisPrompt}`;
             console.log(
@@ -618,34 +733,18 @@ export class UserService {
             try {
                     const model = this.genAI.getGenerativeModel({
                             model: 'gemini-1.5-flash-latest',
-                            generationConfig: { maxOutputTokens: 1800 },
+                            generationConfig: { maxOutputTokens: 2000 },
                     });
                     const result = await model.generateContent(prompt);
                     const responseText = result.response.text();
 
                     console.log(`[compareCompetitiveness] Response from AI: ${responseText}`);
 
-                    // Chỉ sử dụng introContent (không bao gồm introGreeting) trong finalResult
-                    const finalResult = `${introContent}\n\n---\n\n${responseText}`;
+                    const finalResult = `${introGreeting}\n\n${introContent}\n\n---\n\n${responseText}`;
                     console.log(
                             `[compareCompetitiveness] Final result to be returned: ${finalResult.substring(0, 1500)}...`
                     );
 
-                    let order = await this.orderRepository.findOne({
-                            where: { userId, jobId, resumeId: resumeCVId },
-                    });
-                    if (!order) {
-                            order = this.orderRepository.create({
-                                    userId,
-                                    jobId,
-                                    resumeId: resumeCVId,
-                                    analyze_text: finalResult,
-                            });
-                    } else {
-                            order.analyze_text = finalResult;
-                    }
-
-                    await this.orderRepository.save(order);
                     return finalResult;
             } catch (error) {
                     throw new BadRequestException(
@@ -654,7 +753,6 @@ export class UserService {
             }
     }
 
-    // Hàm parseCVContent và getStoredAnalysis không thay đổi
     private async parseCVContent(cvPath: string): Promise<string> {
             console.log(`[parseCVContent] Parsing CV from path: ${cvPath}`);
             const fs = require('fs');
@@ -702,17 +800,5 @@ export class UserService {
                             'Có lỗi khi phân tích CV. Vui lòng kiểm tra file và thử lại.'
                     );
             }
-    }
-
-    async getStoredAnalysis(userId: number, jobId: number, resumeCVId: number): Promise<Order> {
-            const order = await this.orderRepository.findOne({
-                    where: { userId, jobId, resumeId: resumeCVId },
-            });
-            if (!order) {
-                    throw new NotFoundException(
-                            'No analysis found for this user, job, and resume'
-                    );
-            }
-            return order;
     }
 }

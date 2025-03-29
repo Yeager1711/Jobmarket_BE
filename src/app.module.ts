@@ -26,6 +26,7 @@ import { UserModule } from './modules/auth/user/user.module';
 import { AuthMiddleware } from './middlewares//auth/auth.middleware';
 import { FavoriteJobModule } from './modules/favorite_Job/fv_job.module';
 import { PayOSModule } from './modules/auth/payment/payos/payos.module';
+import { OrderModule } from './modules/auth/orders/order.module';
 // Log environment variables to check if they are loaded correctly
 console.log('DB Config:', {
         host: process.env.DB_HOST,
@@ -57,7 +58,8 @@ console.log('DB Config:', {
                 AuthUserModule,
                 UserModule,
                 FavoriteJobModule,
-                PayOSModule
+                PayOSModule,
+                OrderModule,
         ],
 })
 export class AppModule implements NestModule {
@@ -72,13 +74,9 @@ export class AppModule implements NestModule {
                         { path: 'users/deleteUserCurrent', method: RequestMethod.DELETE },
                         { path: 'favorite/favorite-job', method: RequestMethod.POST },
                         { path: 'favorite/user-favorites', method: RequestMethod.GET },
-                        // {
-                        //         path: 'users/compare-competitiveness/:jobId/:resumeCVId',
-                        //         method: RequestMethod.POST,
-                        // },
 
                         {
-                                path: '/users/analyze-competitiveness/:jobId/:resumeCVId',
+                                path: '/users/analyze-competitiveness/:orderId/:jobId/:resumeCVId',
                                 method: RequestMethod.POST,
                         },
 
@@ -88,6 +86,17 @@ export class AppModule implements NestModule {
                         },
 
                        
+                        {
+                                path: 'orders/user-orders',
+                                method: RequestMethod.GET,
+                        },
+
+                        //order disable
+                        {
+                                path: 'orders/:orderId/disable',
+                                method: RequestMethod.PATCH,
+                        },
+
                 );
         }
 }
