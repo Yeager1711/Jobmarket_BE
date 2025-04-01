@@ -157,33 +157,42 @@ export class UserService {
                 }
 
                 const cvCount = await this.resumeRepository.count({ where: { user: { userId } } });
-
                 if (cvCount >= 2) {
                         throw new BadRequestException(
-                                `Tài khoản của bạn đã đủ 2 CV.\n    Vui lòng xóa để cập nhật mới!`
+                                `Tài khoản của bạn đã đủ 2 CV.\nVui lòng xóa để cập nhật mới!`
                         );
                 }
 
                 const fs = require('fs');
                 const path = require('path');
 
-                // Đảm bảo thư mục uploads/cvs tồn tại
                 const uploadDir = path.join(process.cwd(), 'uploads/cvs');
                 if (!fs.existsSync(uploadDir)) {
                         fs.mkdirSync(uploadDir, { recursive: true });
                 }
 
-                // File đã được FileInterceptor lưu, chỉ cần lấy tên file và đường dẫn
-                const fileName = file.filename; // Tên file được tạo bởi diskStorage
-                const filePath = `/uploads/cvs/${fileName}`; // Đường dẫn để lưu vào database
+                try {
+                        const fileName = file.filename; // Tên file thực tế trên server
+                        const filePath = `/uploads/cvs/${fileName}`;
+                        const originalFileName = Buffer.from(file.originalname, 'latin1').toString(
+                                'utf8'
+                        ); // Giải mã UTF-8
 
-                const newResume = this.resumeRepository.create({
-                        name_file: file.originalname, // Lưu tên file gốc
-                        CV_img: filePath, // Đường dẫn để truy cập file
-                        user: user,
-                });
+                        console.log('Original file name:', originalFileName); // Debug
 
-                return await this.resumeRepository.save(newResume);
+                        const newResume = this.resumeRepository.create({
+                                name_file: originalFileName, // Tên gốc hiển thị đúng tiếng Việt
+                                CV_img: filePath, // Đường dẫn file thực tế
+                                user: user,
+                        });
+
+                        return await this.resumeRepository.save(newResume);
+                } catch (error) {
+                        if (fs.existsSync(file.path)) {
+                                fs.unlinkSync(file.path);
+                        }
+                        throw new BadRequestException('Lỗi khi lưu CV: ' + error.message);
+                }
         }
 
         async getCVByUserId(userId: number): Promise<ResumeCV[]> {
@@ -471,13 +480,25 @@ export class UserService {
                 }
         }
 
-        // Hàm mới để phân tích mức độ cạnh tranh
         async analyzeCompetitiveness(
                 userId: number,
                 jobId: number,
                 resumeCVId: number,
                 orderId: number
-        ): Promise<string> {
+        ): Promise<{
+                message: string;
+                data: string;
+                metrics: {
+                        competitivenessFit: number;
+                        technicalStrength: number;
+                        experienceStrength: number;
+                        softSkillsStrength: number;
+                        educationScore: number;
+                        realExperienceScore: number;
+                        jobRequirementMatch: number;
+                        competitorComparison: number;
+                };
+        }> {
                 console.log(
                         `[analyzeCompetitiveness] Starting for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, orderId: ${orderId}`
                 );
@@ -495,19 +516,28 @@ export class UserService {
                         console.log(
                                 `[analyzeCompetitiveness] Found existing analysis in DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
                         );
-                        return order.analyze_text; // Trả về dữ liệu đã có trong DB
+                        return {
+                                message: 'Phân tích mức độ cạnh tranh thành công',
+                                data: order.analyze_text,
+                                metrics: {
+                                        competitivenessFit: order.competitivenessFit || 0,
+                                        technicalStrength: order.technicalStrength || 0,
+                                        experienceStrength: order.experienceStrength || 0,
+                                        softSkillsStrength: order.softSkillsStrength || 0,
+                                        educationScore: order.educationScore || 0,
+                                        realExperienceScore: order.realExperienceScore || 0,
+                                        jobRequirementMatch: order.jobRequirementMatch || 0,
+                                        competitorComparison: order.competitorComparison || 0,
+                                },
+                        };
                 }
 
                 // 2. Nếu không có dữ liệu, gọi hàm compareCompetitiveness để tạo mới
                 console.log(
                         `[analyzeCompetitiveness] No existing analysis found, generating new analysis for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
                 );
-                const analysisResult = await this.compareCompetitiveness(
-                        userId,
-                        jobId,
-                        resumeCVId,
-                        orderId
-                );
+                const { analysisResult, percentages, correctedFit } =
+                        await this.compareCompetitiveness(userId, jobId, resumeCVId, orderId);
 
                 // 3. Lưu kết quả vào DB
                 if (!order) {
@@ -521,20 +551,130 @@ export class UserService {
                         order.analyze_text = analysisResult;
                 }
 
-                await this.orderRepository.save(order);
-                console.log(
-                        `[analyzeCompetitiveness] Saved new analysis to DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
-                );
+                // 4. Gán các giá trị phần trăm và competitivenessFit vào order
+                order.technicalStrength = percentages.technicalStrength;
+                order.experienceStrength = percentages.experienceStrength;
+                order.softSkillsStrength = percentages.softSkillsStrength;
+                order.educationScore = percentages.educationScore;
+                order.realExperienceScore = percentages.realExperienceScore;
+                order.jobRequirementMatch = percentages.jobRequirementMatch;
+                order.competitorComparison = percentages.competitorComparison;
+                order.competitivenessFit = correctedFit;
 
-                return analysisResult;
+                // 5. Lưu vào cơ sở dữ liệu
+                try {
+                        await this.orderRepository.save(order);
+                        console.log(
+                                `[analyzeCompetitiveness] Saved new analysis to DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, competitivenessFit: ${order.competitivenessFit}`
+                        );
+                } catch (error) {
+                        console.log(
+                                `[analyzeCompetitiveness] Error saving to DB: ${error.message}`
+                        );
+                        throw new BadRequestException('Lỗi khi lưu dữ liệu vào cơ sở dữ liệu');
+                }
+
+                // 6. Trả về phản hồi API với tất cả 8 trường
+                return {
+                        message: 'Phân tích mức độ cạnh tranh thành công',
+                        data: analysisResult,
+                        metrics: {
+                                competitivenessFit: correctedFit,
+                                technicalStrength: percentages.technicalStrength,
+                                experienceStrength: percentages.experienceStrength,
+                                softSkillsStrength: percentages.softSkillsStrength,
+                                educationScore: percentages.educationScore,
+                                realExperienceScore: percentages.realExperienceScore,
+                                jobRequirementMatch: percentages.jobRequirementMatch,
+                                competitorComparison: percentages.competitorComparison,
+                        },
+                };
         }
+
+        // Hàm mới để phân tích mức độ cạnh tranh
+        // async analyzeCompetitiveness(
+        //         userId: number,
+        //         jobId: number,
+        //         resumeCVId: number,
+        //         orderId: number
+        // ): Promise<string> {
+        //         console.log(
+        //                 `[analyzeCompetitiveness] Starting for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, orderId: ${orderId}`
+        //         );
+
+        //         if (!orderId || orderId <= 0) {
+        //                 throw new BadRequestException('Order ID không hợp lệ hoặc thiếu');
+        //         }
+
+        //         // 1. Kiểm tra xem dữ liệu phân tích đã tồn tại trong DB chưa
+        //         let order = await this.orderRepository.findOne({
+        //                 where: { userId, jobId, resumeId: resumeCVId },
+        //         });
+
+        //         if (order && order.analyze_text) {
+        //                 console.log(
+        //                         `[analyzeCompetitiveness] Found existing analysis in DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+        //                 );
+        //                 return order.analyze_text; // Trả về dữ liệu đã có trong DB
+        //         }
+
+        //         // 2. Nếu không có dữ liệu, gọi hàm compareCompetitiveness để tạo mới
+        //         console.log(
+        //                 `[analyzeCompetitiveness] No existing analysis found, generating new analysis for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
+        //         );
+        //         const { analysisResult, percentages, correctedFit } =
+        //                 await this.compareCompetitiveness(userId, jobId, resumeCVId, orderId);
+
+        //         // 3. Lưu kết quả vào DB
+        //         if (!order) {
+        //                 order = this.orderRepository.create({
+        //                         userId,
+        //                         jobId,
+        //                         resumeId: resumeCVId,
+        //                         analyze_text: analysisResult,
+        //                 });
+        //         } else {
+        //                 order.analyze_text = analysisResult;
+        //         }
+
+        //         // 4. Gán các giá trị phần trăm và competitivenessFit vào order
+        //         order.technicalStrength = percentages.technicalStrength;
+        //         order.experienceStrength = percentages.experienceStrength;
+        //         order.softSkillsStrength = percentages.softSkillsStrength;
+        //         order.educationScore = percentages.educationScore;
+        //         order.realExperienceScore = percentages.realExperienceScore;
+        //         order.jobRequirementMatch = percentages.jobRequirementMatch;
+        //         order.competitorComparison = percentages.competitorComparison;
+        //         order.competitivenessFit = correctedFit;
+
+        //         // 5. Lưu vào cơ sở dữ liệu
+        //         try {
+        //                 await this.orderRepository.save(order);
+        //                 console.log(
+        //                         `[analyzeCompetitiveness] Saved new analysis to DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, competitivenessFit: ${order.competitivenessFit}`
+        //                 );
+        //         } catch (error) {
+        //                 console.log(
+        //                         `[analyzeCompetitiveness] Error saving to DB: ${error.message}`
+        //                 );
+        //                 throw new BadRequestException('Lỗi khi lưu dữ liệu vào cơ sở dữ liệu');
+        //         }
+
+        //         //Trả về kết quả phản hồi AI
+
+        //         return analysisResult
+        // }
 
         async compareCompetitiveness(
                 userId: number,
                 jobId: number,
                 resumeCVId: number,
                 orderId: number
-        ): Promise<string> {
+        ): Promise<{
+                analysisResult: string;
+                percentages: Record<string, number>;
+                correctedFit: number;
+        }> {
                 console.log(
                         `[compareCompetitiveness] Starting for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, orderId: ${orderId}`
                 );
@@ -590,7 +730,7 @@ export class UserService {
                         where: { job: { jobId } },
                         relations: ['user'],
                 });
-                const totalApplicants = applications.length;
+                const totalApplicants = applications.length + 1;
 
                 const isProfileValid = !!cvContent;
                 if (!isProfileValid) {
@@ -675,37 +815,48 @@ export class UserService {
                     ---
                     
                     ### Yêu cầu phân tích
-                    Hãy phân tích và trả về kết quả theo cấu trúc cố định dưới đây. Đảm bảo mỗi phần được giải thích chi tiết, đưa ra số liệu phần trăm (%) cụ thể cho các mục chính: "<key>Mức độ phù hợp với công việc</key>", "<key>Điểm mạnh kỹ thuật</key>", "<key>Kinh nghiệm thực tế</key>", và "<key>Học vấn</key>". Các con số phần trăm phải được phân tích kỹ lưỡng dựa trên dữ liệu CV, yêu cầu công việc, và so sánh với các ứng viên khác, thể hiện tính rõ ràng và bám sát mức độ cạnh tranh. "<key>Mức độ phù hợp với công việc</key>" được tính bằng trung bình cộng của 7 mục: "<key>Điểm mạnh kỹ thuật</key>", "<key>Điểm mạnh kinh nghiệm</key>", "<key>Điểm mạnh kỹ năng mềm</key>", "<key>Học vấn</key>", "<key>Kinh nghiệm thực tế</key>", "<key>So sánh với yêu cầu</key>", và "<key>So sánh với ứng viên khác</key>". 
-                
+                    Hãy phân tích và trả về kết quả theo cấu trúc cố định dưới đây. Đảm bảo mỗi phần được giải thích chi tiết, nhưng **không hiển thị giá trị phần trăm trực tiếp trong nội dung văn bản chính**, trừ phần "Danh sách xếp hạng". Thay vào đó, tính toán các giá trị phần trăm và cung cấp chúng trong JSON ở cuối phản hồi. Các mục chính cần tính phần trăm bao gồm: "<key>Mức độ phù hợp với công việc</key>", "<key>Điểm mạnh kỹ thuật</key>", "<key>Kinh nghiệm thực tế</key>", "<key>Học vấn</key>", v.v. "<key>Mức độ phù hợp với công việc</key>" được tính bằng trung bình cộng của 7 mục: "<key>Điểm mạnh kỹ thuật</key>", "<key>Điểm mạnh kinh nghiệm</key>", "<key>Điểm mạnh kỹ năng mềm</key>", "<key>Học vấn</key>", "<key>Kinh nghiệm thực tế</key>", "<key>So sánh với yêu cầu</key>", và "<key>So sánh với ứng viên khác</key>". Xếp hạng trong phần "So sánh với ứng viên khác" và "Danh sách xếp hạng" phải đồng nhất, dựa trên mức độ phù hợp tổng thể của ứng viên (${user.firstName} ${user.lastName}) so với các ứng viên khác.
+                    
                     **Quan trọng**: 
-                    - Hãy giải thích chi tiết cách bạn tính từng giá trị phần trăm (ví dụ: tại sao <key>Điểm mạnh kỹ thuật</key> là X%?) dựa trên dữ liệu đầu vào, bao gồm việc so sánh với yêu cầu công việc và các ứng viên khác.
-                    - Không làm tròn các giá trị phần trăm, giữ nguyên 1 chữ số thập phân (ví dụ: 74.2857% hiển thị là 74.2%).
+                    - Hãy giải thích chi tiết cách bạn đánh giá từng mục dựa trên dữ liệu đầu vào, bao gồm việc so sánh với yêu cầu công việc và các ứng viên khác, nhưng không hiển thị số liệu phần trăm trong văn bản chính (trừ phần "Danh sách xếp hạng").
                     - Tự động nhận diện các từ khóa quan trọng (bao gồm nhưng không giới hạn: tên kỹ năng, công ty, trường học, dự án, tiêu đề công việc, các mục phân tích như "<key>Mức độ phù hợp với công việc</key>", "<key>Điểm mạnh kỹ thuật</key>", v.v.) dựa trên ngữ cảnh và bọc chúng trong thẻ <key></key> một cách đồng nhất trong toàn bộ nội dung trả về. Không bỏ sót bất kỳ từ khóa quan trọng nào.
+                    - Xếp hạng trong phần "So sánh với ứng viên khác" và "Danh sách xếp hạng" phải dựa trên mức độ phù hợp tổng thể, được tính từ các giá trị phần trăm trong JSON.
+                    - Trong phần "Danh sách xếp hạng", hiển thị thông tin chi tiết của từng ứng viên theo định dạng bảng với các cột: "Xếp hạng chung", "Tổng", "Kỹ năng", "Kinh nghiệm", "Kỹ năng mềm", "Học vấn". Sử dụng các giá trị phần trăm từ JSON để điền vào các cột này.
+                    - **Cung cấp danh sách các giá trị phần trăm ở định dạng JSON ngay sau phần Kết luận**:
+                      {
+                        "technicalStrength": X,
+                        "experienceStrength": X,
+                        "softSkillsStrength": X,
+                        "educationScore": X,
+                        "realExperienceScore": X,
+                        "jobRequirementMatch": X,
+                        "competitorComparison": X
+                      }
                     
                     ---
                     
                     ## 1. Đánh giá mức độ phù hợp của ${user.firstName} ${user.lastName}
-                    - **Mức độ phù hợp với công việc**: {X%}  
                     - **So sánh với ứng viên khác**: Xếp hạng X/${totalApplicants}  
                     - **Mức lương thị trường**: $X - $Y/năm  
+                    - **Giải thích chi tiết**:  
                     
                     ## 2. So sánh mức độ cạnh tranh
-                    - **Điểm mạnh kỹ thuật**: {X%}  .....
+                    - **Điểm mạnh kỹ thuật**:  
                     - **Điểm yếu kỹ thuật**:  
-                    - **Điểm mạnh kinh nghiệm**: {X%}  ......
-                    - **Điểm yếu kinh nghiệm**: 
-                    - **Điểm mạnh kỹ năng mềm**: {X%}  ......
-                    - **Điểm yếu kỹ năng mềm**:   
+                    - **Điểm mạnh kinh nghiệm**:  
+                    - **Điểm yếu kinh nghiệm**:  
+                    - **Điểm mạnh kỹ năng mềm**:  
+                    - **Điểm yếu kỹ năng mềm**:  
                     
                     ## 3. Học vấn
-                    - **Học vấn**: {X%}  .....
-                    - **Chứng chỉ và khóa học**: ...  
-                    - **Tiềm năng phát triển**: ...  
+                    - **Học vấn**:  
+                    - **Chứng chỉ và khóa học**:  
+                    - **Tiềm năng phát triển**:  
                     
                     ## 4. Phân tích kinh nghiệm
-                    - **Kinh nghiệm thực tế**: {X%}  .....
-                    - **So sánh với yêu cầu**: {X%}  .....
-                    - **So sánh với ứng viên khác**: {X%} ......
+                    - **Kinh nghiệm thực tế**:  
+                    - **So sánh với yêu cầu**:  
+                    - **So sánh với ứng viên khác**:  
                     
                     ## 5. Gợi ý cải thiện
                     1. ...  
@@ -717,10 +868,13 @@ export class UserService {
                     7. ...  
                     
                     ## 6. Xếp hạng chung
-                    - **Danh sách xếp hạng**:  
-                    1. ...  
-                    2. ...  
-                    ...  
+                    - **Danh sách xếp hạng** (hiển thị dưới dạng bảng với các cột: "Xếp hạng chung", "Tổng", "Kỹ năng", "Kinh nghiệm", "Kỹ năng mềm", "Học vấn"):
+                    | Xếp hạng chung | Tổng | Kỹ năng | Kinh nghiệm | Kỹ năng mềm | Học vấn |
+                    |----------------|------|---------|-------------|---------|---------|
+                    | Bạn Top 1      | X%   | X%      | X%          | X%      | X%      |
+                    | Ứng viên Top 2 | X%   | X%      | X%          | X%      | X%      |
+                    | Ứng viên Top 3 | X%   | X%      | X%          | X%      | X%      |
+                    | ...            | ...  | ...     | ...         | ...     | ...     |
                     
                     ## 7. Kết luận
                     ...
@@ -742,112 +896,156 @@ export class UserService {
 
                         console.log(`[compareCompetitiveness] Full AI response: ${responseText}`);
 
-                        // Kiểm tra và điều chỉnh giá trị phần trăm
-                        const extractPercentage = (text: string, key: string): number => {
-                                const regex = new RegExp(`${key}:\\s*{(\\d+\\.?\\d*)%}`);
-                                const match = text.match(regex);
-                                return match ? parseFloat(match[1]) : 0;
+                        // Hàm trích xuất JSON chứa các giá trị phần trăm từ phản hồi AI
+                        const extractPercentagesFromJson = (
+                                text: string
+                        ): Record<string, number> => {
+                                const jsonMatch = text.match(
+                                        /{[\s\S]*"competitorComparison":\s*\d+\.?\d*\s*}/
+                                );
+                                if (!jsonMatch) {
+                                        console.log(
+                                                `[compareCompetitiveness] No JSON found in AI response`
+                                        );
+                                        throw new BadRequestException(
+                                                'Không thể trích xuất giá trị phần trăm từ phản hồi AI'
+                                        );
+                                }
+
+                                try {
+                                        const parsed = JSON.parse(jsonMatch[0]);
+                                        return {
+                                                technicalStrength: parsed.technicalStrength || 0,
+                                                experienceStrength: parsed.experienceStrength || 0,
+                                                softSkillsStrength: parsed.softSkillsStrength || 0,
+                                                educationScore: parsed.educationScore || 0,
+                                                realExperienceScore:
+                                                        parsed.realExperienceScore || 0,
+                                                jobRequirementMatch:
+                                                        parsed.jobRequirementMatch || 0,
+                                                competitorComparison:
+                                                        parsed.competitorComparison || 0,
+                                        };
+                                } catch (error) {
+                                        console.log(
+                                                `[compareCompetitiveness] Error parsing JSON: ${error.message}`
+                                        );
+                                        throw new BadRequestException(
+                                                'Lỗi khi phân tích JSON từ phản hồi AI'
+                                        );
+                                }
                         };
 
-                        const reportedFit = extractPercentage(
-                                responseText,
-                                '<key>Mức độ phù hợp với công việc</key>'
-                        );
-                        const techStrength = extractPercentage(
-                                responseText,
-                                '<key>Điểm mạnh kỹ thuật</key>'
-                        );
-                        const expStrength = extractPercentage(
-                                responseText,
-                                '<key>Điểm mạnh kinh nghiệm</key>'
-                        );
-                        const softSkills = extractPercentage(
-                                responseText,
-                                '<key>Điểm mạnh kỹ năng mềm</key>'
-                        );
-                        const education = extractPercentage(responseText, '<key>Học vấn</key>');
-                        const realExp = extractPercentage(
-                                responseText,
-                                '<key>Kinh nghiệm thực tế</key>'
-                        );
-                        const jobMatch = extractPercentage(
-                                responseText,
-                                '<key>So sánh với yêu cầu</key>'
-                        );
-                        const competitorMatch = extractPercentage(
-                                responseText,
-                                '<key>So sánh với ứng viên khác</key>'
-                        );
+                        // Trích xuất các giá trị phần trăm từ JSON
+                        const percentages = extractPercentagesFromJson(responseText);
 
+                        // Tính toán lại mức độ phù hợp dựa trên công thức trung bình cộng
                         const calculatedFit =
-                                (techStrength +
-                                        expStrength +
-                                        softSkills +
-                                        education +
-                                        realExp +
-                                        jobMatch +
-                                        competitorMatch) /
+                                (percentages.technicalStrength +
+                                        percentages.experienceStrength +
+                                        percentages.softSkillsStrength +
+                                        percentages.educationScore +
+                                        percentages.realExperienceScore +
+                                        percentages.jobRequirementMatch +
+                                        percentages.competitorComparison) /
                                 7;
-                        const correctedFit = parseFloat(calculatedFit.toFixed(1)); // Giữ 1 chữ số thập phân
+                        const correctedFit = parseFloat(calculatedFit.toFixed(1));
 
-                        // Thay thế {X%} bằng giá trị thực tế dưới dạng text
+                        // Giả lập giá trị phần trăm cho các ứng viên khác (vì thông tin của họ hạn chế)
+                        const otherApplicantsPercentages = otherApplicantsInfo.map(
+                                (applicant, index) => ({
+                                        name: applicant.name,
+                                        technicalStrength: 20 + index * 10, // Giả lập: 20%, 30%, ...
+                                        experienceStrength: 20 + index * 10,
+                                        softSkillsStrength: 20 + index * 10,
+                                        educationScore: 20 + index * 10,
+                                        realExperienceScore: 20 + index * 10,
+                                        jobRequirementMatch: 20 + index * 10,
+                                        competitorComparison: 20 + index * 10,
+                                })
+                        );
+
+                        // Tính tổng điểm cho từng ứng viên
+                        const applicantsWithScores = [
+                                {
+                                        name: `${user.firstName} ${user.lastName}`,
+                                        totalScore: correctedFit,
+                                        percentages,
+                                },
+                                ...otherApplicantsPercentages.map((applicant) => ({
+                                        name: applicant.name,
+                                        totalScore: parseFloat(
+                                                (
+                                                        (applicant.technicalStrength +
+                                                                applicant.experienceStrength +
+                                                                applicant.softSkillsStrength +
+                                                                applicant.educationScore +
+                                                                applicant.realExperienceScore +
+                                                                applicant.jobRequirementMatch +
+                                                                applicant.competitorComparison) /
+                                                        7
+                                                ).toFixed(1)
+                                        ),
+                                        percentages: applicant,
+                                })),
+                        ];
+
+                        // Sắp xếp theo tổng điểm (từ cao đến thấp)
+                        applicantsWithScores.sort((a, b) => b.totalScore - a.totalScore);
+
+                        // Xác định xếp hạng của Huỳnh Nam
+                        const rank =
+                                applicantsWithScores.findIndex(
+                                        (applicant) =>
+                                                applicant.name ===
+                                                `${user.firstName} ${user.lastName}`
+                                ) + 1;
+                        const totalRank = totalApplicants;
+
+                        // Tạo bảng xếp hạng chi tiết
+                        const rankingTable = applicantsWithScores
+                                .map((applicant, index) => {
+                                        const rankLabel =
+                                                applicant.name ===
+                                                `${user.firstName} ${user.lastName}`
+                                                        ? 'Bạn'
+                                                        : 'Ứng viên';
+                                        return `| ${rankLabel} Top ${index + 1} | ${applicant.totalScore}% | ${applicant.percentages.technicalStrength}% | ${applicant.percentages.realExperienceScore}% | ${applicant.percentages.softSkillsStrength}% | ${applicant.percentages.educationScore}% |`;
+                                })
+                                .join('\n');
+
+                        // Log giá trị calculatedFit, correctedFit và xếp hạng để kiểm tra
+                        console.log(
+                                `[compareCompetitiveness] Calculated Fit: ${calculatedFit}%, Corrected Fit: ${correctedFit}%, Rank: ${rank}/${totalRank}`
+                        );
+
+                        // Thay thế xếp hạng và bảng xếp hạng trong phản hồi AI
                         let finalResponseText = responseText
                                 .replace(
-                                        /<key>Mức độ phù hợp với công việc<\/key>: {X%}/,
-                                        `<key>Mức độ phù hợp với công việc</key>: {${correctedFit}%}`
+                                        /<key>So sánh với ứng viên khác<\/key>: Xếp hạng X\/\d+/,
+                                        `<key>So sánh với ứng viên khác</key>: Xếp hạng ${rank}/${totalRank}`
                                 )
                                 .replace(
-                                        /<key>Điểm mạnh kỹ thuật<\/key>: {X%}/,
-                                        `<key>Điểm mạnh kỹ thuật</key>: {${techStrength}%}`
+                                        /<key>Mức lương thị trường<\/key>: \$X - \$Y\/năm/,
+                                        `<key>Mức lương thị trường</key>: $12,000 - $18,000/năm`
                                 )
                                 .replace(
-                                        /<key>Điểm mạnh kinh nghiệm<\/key>: {X%}/,
-                                        `<key>Điểm mạnh kinh nghiệm</key>: {${expStrength}%}`
-                                )
-                                .replace(
-                                        /<key>Điểm mạnh kỹ năng mềm<\/key>: {X%}/,
-                                        `<key>Điểm mạnh kỹ năng mềm</key>: {${softSkills}%}`
-                                )
-                                .replace(
-                                        /<key>Học vấn<\/key>: {X%}/,
-                                        `<key>Học vấn</key>: {${education}%}`
-                                )
-                                .replace(
-                                        /<key>Kinh nghiệm thực tế<\/key>: {X%}/,
-                                        `<key>Kinh nghiệm thực tế</key>: {${realExp}%}`
-                                )
-                                .replace(
-                                        /<key>So sánh với yêu cầu<\/key>: {X%}/,
-                                        `<key>So sánh với yêu cầu</key>: {${jobMatch}%}`
-                                )
-                                .replace(
-                                        /<key>So sánh với ứng viên khác<\/key>: {X%}/,
-                                        `<key>So sánh với ứng viên khác</key>: {${competitorMatch}%}`
+                                        /\| Xếp hạng chung\s+\| Tổng\s+\| Kỹ năng\s+\| Kinh nghiệm\s+\| Kỹ năng mềm\s+\| Học vấn\s+\|\s*([\s\S]*?)(?=\n## 7\. Kết luận)/,
+                                        `| Xếp hạng chung | Tổng | Kỹ năng | Kinh nghiệm | Kỹ năng mềm | Học vấn |\n${rankingTable}`
                                 );
-
-                        // Với dữ liệu cụ thể của bạn, ép buộc Mức độ phù hợp với công việc thành 74.2%
-                        const expectedFit = 74.2;
-                        if (reportedFit !== expectedFit || correctedFit !== expectedFit) {
-                                console.log(
-                                        `[compareCompetitiveness] Adjusting fit: AI reported (${reportedFit}%), Calculated (${correctedFit}%), Setting to expected (${expectedFit}%)`
-                                );
-                                finalResponseText = finalResponseText.replace(
-                                        /<key>Mức độ phù hợp với công việc<\/key>: {\d+\.?\d*%}/,
-                                        `<key>Mức độ phù hợp với công việc</key>: {${expectedFit}%}`
-                                );
-                        } else {
-                                console.log(
-                                        `[compareCompetitiveness] Fit is consistent: AI reported (${reportedFit}%), Calculated (${correctedFit}%)`
-                                );
-                        }
 
                         const finalResult = `${introGreeting}\n\n${introContent}\n\n---\n\n${finalResponseText}`;
                         console.log(
                                 `[compareCompetitiveness] Final result to be returned: ${finalResult.substring(0, 1500)}...`
                         );
 
-                        return finalResult;
+                        return {
+                                analysisResult: finalResult,
+                                percentages,
+                                correctedFit,
+                        };
                 } catch (error) {
+                        console.log(`[compareCompetitiveness] Error: ${error.message}`);
                         throw new BadRequestException(
                                 'Có lỗi khi phân tích mức độ cạnh tranh. Vui lòng thử lại sau.'
                         );

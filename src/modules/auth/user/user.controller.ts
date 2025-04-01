@@ -61,6 +61,21 @@ export class UserController {
                                         );
                                 },
                         }),
+                        fileFilter: (req, file, cb) => {
+                                // Chỉ cho phép các định dạng file cụ thể
+                                const allowedTypes = ['.pdf', '.doc', '.docx'];
+                                const extname = path.extname(file.originalname).toLowerCase();
+                                if (allowedTypes.includes(extname)) {
+                                        cb(null, true);
+                                } else {
+                                        cb(
+                                                new BadRequestException(
+                                                        'Chỉ hỗ trợ file PDF, DOC, DOCX'
+                                                ),
+                                                false
+                                        );
+                                }
+                        },
                 })
         )
         async uploadCV(@Param('userId') userId: string, @UploadedFile() file: Express.Multer.File) {
@@ -287,13 +302,20 @@ export class UserController {
                         );
                 }
 
-                const { jobId, resumeCVId, totalAmount } = body;
+                const { jobId, resumeCVId, totalAmount, disable } = body;
                 if (!jobId || !resumeCVId || !totalAmount) {
                         throw new BadRequestException(
                                 'Thiếu các trường bắt buộc: jobId, resumeCVId, totalAmount'
                         );
                 }
 
-                return this.payosService.createPaymentLink(userId, jobId, resumeCVId, totalAmount);
+                // Truyền toàn bộ body vào PayOSService để đảm bảo disable không bị bỏ qua
+                return this.payosService.createPaymentLink(
+                        userId,
+                        jobId,
+                        resumeCVId,
+                        totalAmount,
+                        disable
+                );
         }
 }

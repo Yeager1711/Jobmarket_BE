@@ -25,9 +25,11 @@ export class PayOSService {
                 userId: number,
                 jobId: number,
                 resumeId: number,
-                totalAmount: number
+                totalAmount: number,
+                disable: number
         ) {
                 try {
+                        console.log('Received disable value:', disable, typeof disable);
                         if (!userId || !jobId || !resumeId || !totalAmount) {
                                 console.error('Invalid input data:', {
                                         userId,
@@ -63,10 +65,12 @@ export class PayOSService {
                                 totalAmount,
                                 orderCode: orderCode.toString(), // Lưu orderCode dưới dạng string nếu cần
                                 status: 'PENDING',
+                                disable: disable === 0 ? false : true,
                                 created_at: new Date(),
                         });
                         const savedOrder = await this.orderRepository.save(order);
                         console.log('Order saved:', savedOrder);
+                        console.log('Saved order disable value:', savedOrder.disable);
 
                         const paymentData = {
                                 orderCode: orderCode, // PayOS yêu cầu orderCode là số

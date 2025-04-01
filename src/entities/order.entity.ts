@@ -31,19 +31,45 @@ export class Order {
         @Column()
         resumeId: number;
 
-        @Column({ type: 'float', nullable: true }) // Thêm trường totalAmount
+        @Column({ type: 'float', nullable: true })
         totalAmount: number;
 
-        @Column({ default: 'pending' }) // Thêm trường status
+        @Column({ default: 'pending' })
         status: string;
 
-        @Column({ type: 'varchar', length: 20, nullable: true }) // Sửa thành VARCHAR(20) để chứa orderCode
+        @Column({ type: 'varchar', length: 20, nullable: true })
         orderCode: string;
 
         @Column({ type: 'text', nullable: true })
         analyze_text: string;
 
-        @Column()
+        // Trường hiện tại cho mức độ phù hợp với công việc
+        @Column({ type: 'float', nullable: true })
+        competitivenessFit: number;
+
+        // Thêm các trường mới để lưu 7 giá trị phần trăm
+        @Column({ type: 'float', nullable: true })
+        technicalStrength: number;
+
+        @Column({ type: 'float', nullable: true })
+        experienceStrength: number;
+
+        @Column({ type: 'float', nullable: true })
+        softSkillsStrength: number;
+
+        @Column({ type: 'float', nullable: true })
+        educationScore: number;
+
+        @Column({ type: 'float', nullable: true })
+        realExperienceScore: number;
+
+        @Column({ type: 'float', nullable: true })
+        jobRequirementMatch: number;
+
+        @Column({ type: 'float', nullable: true })
+        competitorComparison: number;
+
+        @Column({ type: 'boolean', default: false })
         disable: boolean;
 
         @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
