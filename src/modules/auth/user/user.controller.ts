@@ -318,4 +318,35 @@ export class UserController {
                         disable
                 );
         }
+
+        //Apply Job
+        // @Post('apply-job')
+        // async applyJob(
+        //         @Req() req: Request,
+        //         @Body() body: { jobId: number; resumeCVId: number; letter_introduction?: string }
+        // ) {
+        //         const userId = (req as any).user?.userId;
+        //         if (!userId) {
+        //                 throw new UnauthorizedException(
+        //                         'Không tìm thấy thông tin user trong token'
+        //                 );
+        //         }
+
+        //         const { jobId, resumeCVId, letter_introduction } = body;
+
+        //         if (!jobId) {
+        //                 throw new BadRequestException('Thiếu JobId');
+        //         }
+
+        //         const resultApply = await this.userService.applyJob(
+        //                 userId,
+        //                 jobId,
+        //                 resumeCVId,
+        //                 letter_introduction
+        //         );
+        //         return {
+        //                 message: 'Ứng tuyển công việc thành công',
+        //                 data: resultApply,
+        //         };
+        // }
 }

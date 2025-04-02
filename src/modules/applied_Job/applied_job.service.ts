@@ -6,70 +6,104 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ResumeCV } from 'src/entities/resumecv.entity';
 import { User } from '../../entities/user.entity';
-import { JobFavorite } from '../../entities/job_favorite.entity';
 import { Job } from '../../entities/job.entity';
+import { JobApplication } from 'src/entities/job_application.entity';
 
 @Injectable()
-export class FavoriteJobService {
+export class AppliedJobService {
         constructor(
                 @InjectRepository(User)
                 private readonly userRepository: Repository<User>,
 
-                @InjectRepository(JobFavorite)
-                private readonly jobFavoriteRepository: Repository<JobFavorite>,
+                @InjectRepository(ResumeCV)
+                private readonly resumeRepository: Repository<ResumeCV>,
+
+                @InjectRepository(JobApplication)
+                private readonly jobApplicationRepository: Repository<JobApplication>,
 
                 @InjectRepository(Job)
                 private readonly jobRepository: Repository<Job>
         ) {}
 
-        async addFavoriteJob(userId: number, jobId: number): Promise<JobFavorite> {
-                // Kiểm tra user có tồn tại không
+        async applyJob(
+                userId: number,
+                jobId: number,
+                resumeCVId?: number,
+                letterIntroduction?: string
+        ): Promise<JobApplication> {
                 const user = await this.userRepository.findOne({ where: { userId } });
                 if (!user) {
                         throw new NotFoundException('Người dùng không tồn tại');
                 }
 
-                // Kiểm tra job có tồn tại không
                 const job = await this.jobRepository.findOne({ where: { jobId } });
                 if (!job) {
                         throw new NotFoundException('Công việc không tồn tại');
                 }
 
-                // Kiểm tra xem công việc đã có trong danh sách yêu thích chưa
-                const existingFavorite = await this.jobFavoriteRepository.findOne({
-                        where: { user: { userId }, job: { jobId } },
+                // Kiểm tra ứng tuyển với điều kiện resumeCVId khác
+                const existingApplication = await this.jobApplicationRepository.findOne({
+                        where: {
+                                user: { userId },
+                                job: { jobId },
+                                resumeCVId: resumeCVId, // Thêm điều kiện resumeCVId
+                        },
                 });
-                if (existingFavorite) {
+                if (existingApplication) {
                         throw new ConflictException(
-                                'Công việc này đã có trong danh sách yêu thích'
+                                'Bạn đã ứng tuyển công việc này với CV này rồi'
                         );
                 }
 
-                // Tạo mới bản ghi JobFavorite
-                const newFavorite = this.jobFavoriteRepository.create({
+                let selectedResume: ResumeCV | null = null;
+                if (resumeCVId !== undefined) {
+                        selectedResume = await this.resumeRepository.findOne({
+                                where: { resumeCVId, user: { userId } },
+                        });
+                        if (!selectedResume) {
+                                throw new NotFoundException(
+                                        'CV không tồn tại hoặc không thuộc về bạn'
+                                );
+                        }
+                } else {
+                        selectedResume = await this.resumeRepository.findOne({
+                                where: { user: { userId }, isDefault: true },
+                        });
+                        if (!selectedResume) {
+                                throw new BadRequestException(
+                                        'Bạn chưa có CV mặc định để ứng tuyển'
+                                );
+                        }
+                }
+
+                const application = this.jobApplicationRepository.create({
                         user,
                         job,
-                        saved_at: new Date(),
+                        resumeCVId: selectedResume.resumeCVId,
+                        letter_introduction: letterIntroduction || '', // Lưu letter_introduction, mặc định là chuỗi rỗng nếu không có
+                        status: 'Pending',
+                        applied_at: new Date(),
                 });
 
-                return await this.jobFavoriteRepository.save(newFavorite);
+                return await this.jobApplicationRepository.save(application);
         }
 
-        async getUserFavoriteJobs(userId: number): Promise<JobFavorite[]> {
+        async getUserAppliedJobs(userId: number): Promise<JobApplication[]> {
                 const user = await this.userRepository.findOne({ where: { userId } });
                 if (!user) {
                         throw new NotFoundException('Người dùng không tồn tại');
                 }
 
-                const favorites = await this.jobFavoriteRepository.find({
+                const applied = await this.jobApplicationRepository.find({
                         where: { user: { userId } },
                         relations: [
                                 'job',
                                 'job.workLocation',
                                 'job.workLocation.district',
                                 'job.company',
-                                'job.company.images', 
+                                'job.company.images',
                                 'job.jobLevel',
                                 'job.jobType',
                                 'job.jobIndustry',
@@ -77,15 +111,15 @@ export class FavoriteJobService {
                                 'job.refJob',
                         ],
                         select: {
-                                favoriteId: true,
-                                saved_at: true,
+                                appliedId: true,
+                                applied_at: true,
+                                letter_introduction: true,
                                 user: {
-                                        userId: true
+                                        userId: true,
                                 },
                                 job: {
                                         jobId: true,
                                         title: true,
-                                        salary: true,
                                         salary_from: true,
                                         salary_to: true,
                                         expire_on: true,
@@ -133,6 +167,6 @@ export class FavoriteJobService {
                         },
                 });
 
-                return favorites;
+                return applied;
         }
 }

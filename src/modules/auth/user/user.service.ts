@@ -591,80 +591,6 @@ export class UserService {
                 };
         }
 
-        // Hàm mới để phân tích mức độ cạnh tranh
-        // async analyzeCompetitiveness(
-        //         userId: number,
-        //         jobId: number,
-        //         resumeCVId: number,
-        //         orderId: number
-        // ): Promise<string> {
-        //         console.log(
-        //                 `[analyzeCompetitiveness] Starting for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, orderId: ${orderId}`
-        //         );
-
-        //         if (!orderId || orderId <= 0) {
-        //                 throw new BadRequestException('Order ID không hợp lệ hoặc thiếu');
-        //         }
-
-        //         // 1. Kiểm tra xem dữ liệu phân tích đã tồn tại trong DB chưa
-        //         let order = await this.orderRepository.findOne({
-        //                 where: { userId, jobId, resumeId: resumeCVId },
-        //         });
-
-        //         if (order && order.analyze_text) {
-        //                 console.log(
-        //                         `[analyzeCompetitiveness] Found existing analysis in DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
-        //                 );
-        //                 return order.analyze_text; // Trả về dữ liệu đã có trong DB
-        //         }
-
-        //         // 2. Nếu không có dữ liệu, gọi hàm compareCompetitiveness để tạo mới
-        //         console.log(
-        //                 `[analyzeCompetitiveness] No existing analysis found, generating new analysis for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}`
-        //         );
-        //         const { analysisResult, percentages, correctedFit } =
-        //                 await this.compareCompetitiveness(userId, jobId, resumeCVId, orderId);
-
-        //         // 3. Lưu kết quả vào DB
-        //         if (!order) {
-        //                 order = this.orderRepository.create({
-        //                         userId,
-        //                         jobId,
-        //                         resumeId: resumeCVId,
-        //                         analyze_text: analysisResult,
-        //                 });
-        //         } else {
-        //                 order.analyze_text = analysisResult;
-        //         }
-
-        //         // 4. Gán các giá trị phần trăm và competitivenessFit vào order
-        //         order.technicalStrength = percentages.technicalStrength;
-        //         order.experienceStrength = percentages.experienceStrength;
-        //         order.softSkillsStrength = percentages.softSkillsStrength;
-        //         order.educationScore = percentages.educationScore;
-        //         order.realExperienceScore = percentages.realExperienceScore;
-        //         order.jobRequirementMatch = percentages.jobRequirementMatch;
-        //         order.competitorComparison = percentages.competitorComparison;
-        //         order.competitivenessFit = correctedFit;
-
-        //         // 5. Lưu vào cơ sở dữ liệu
-        //         try {
-        //                 await this.orderRepository.save(order);
-        //                 console.log(
-        //                         `[analyzeCompetitiveness] Saved new analysis to DB for userId: ${userId}, jobId: ${jobId}, resumeCVId: ${resumeCVId}, competitivenessFit: ${order.competitivenessFit}`
-        //                 );
-        //         } catch (error) {
-        //                 console.log(
-        //                         `[analyzeCompetitiveness] Error saving to DB: ${error.message}`
-        //                 );
-        //                 throw new BadRequestException('Lỗi khi lưu dữ liệu vào cơ sở dữ liệu');
-        //         }
-
-        //         //Trả về kết quả phản hồi AI
-
-        //         return analysisResult
-        // }
-
         async compareCompetitiveness(
                 userId: number,
                 jobId: number,
@@ -741,13 +667,19 @@ export class UserService {
 
                 const otherApplicantsInfo = applications
                         .filter((app) => app.user.userId !== userId)
-                        .map((app, index) => ({
+                        .map((app) => ({
                                 name: `${app.user.firstName} ${app.user.lastName}`,
                                 skills: app.user.skills || 'Không có thông tin kỹ năng',
                                 experienceLevel:
                                         app.user.experienceLevel ||
                                         'Không có thông tin kinh nghiệm',
+                                yearOfNumberExperience:
+                                        app.user.yearOfNumberExperience ||
+                                        'Không có thông tin số năm kinh nghiệm',
                                 education: app.user.education || 'Không có thông tin học vấn',
+                                highestDegree:
+                                        app.user.highestDegree ||
+                                        'Không có thông tin bằng cấp cao nhất',
                                 jobTitle:
                                         app.user.jobTitle || 'Không có thông tin vị trí mong muốn',
                         }));
@@ -764,13 +696,94 @@ export class UserService {
                                     (applicant, index) => `Ứng viên ${index + 1}: ${applicant.name}
                     - Kỹ năng: ${applicant.skills}
                     - Kinh nghiệm: ${applicant.experienceLevel}
+                    - Số năm kinh nghiệm: ${applicant.yearOfNumberExperience}
                     - Học vấn: ${applicant.education}
+                    - Bằng cấp cao nhất: ${applicant.highestDegree}
                     - Vị trí mong muốn: ${applicant.jobTitle}`
                             )
                             .join('\n\n')}
                     `;
 
                 const introPrompt = `${introGreeting}\n\n${introContent}`;
+
+                // Hàm trích xuất kỹ năng từ yêu cầu công việc
+                const extractSkillsFromJobRequirement = (
+                        requirement: string
+                ): { requiredSkills: string[]; preferredSoftSkills: string[] } => {
+                        const requirementLower = requirement.toLowerCase();
+
+                        // Danh sách kỹ năng kỹ thuật phổ biến (có thể mở rộng)
+                        const technicalSkillsList = [
+                                'html',
+                                'css',
+                                'javascript',
+                                'react.js',
+                                'vue.js',
+                                'rest api',
+                                'node.js',
+                                'express',
+                                'mongodb',
+                                'sql',
+                                'java',
+                                'python',
+                                'spring boot',
+                                'docker',
+                                'kubernetes',
+                                'aws',
+                                'git',
+                                'typescript',
+                                'angular',
+                                'php',
+                                'laravel',
+                        ];
+
+                        // Danh sách kỹ năng mềm phổ biến
+                        const softSkillsList = [
+                                'agile/scrum',
+                                'làm việc nhóm',
+                                'giao tiếp',
+                                'giải quyết vấn đề',
+                                'quản lý thời gian',
+                                'thích nghi',
+                                'tư duy sáng tạo',
+                                'lãnh đạo',
+                        ];
+
+                        // Trích xuất kỹ năng kỹ thuật
+                        const requiredSkills = technicalSkillsList.filter((skill) =>
+                                requirementLower.includes(skill.toLowerCase())
+                        );
+
+                        // Trích xuất kỹ năng mềm
+                        const preferredSoftSkills = softSkillsList.filter((skill) =>
+                                requirementLower.includes(skill.toLowerCase())
+                        );
+
+                        // Nếu không tìm thấy kỹ năng nào, trả về giá trị mặc định
+                        if (requiredSkills.length === 0) {
+                                console.log(
+                                        `[extractSkillsFromJobRequirement] No technical skills found in job requirement, defaulting to basic skills`
+                                );
+                                requiredSkills.push('javascript'); // Giá trị mặc định nếu không tìm thấy kỹ năng
+                        }
+
+                        if (preferredSoftSkills.length === 0) {
+                                console.log(
+                                        `[extractSkillsFromJobRequirement] No soft skills found in job requirement, defaulting to basic soft skills`
+                                );
+                                preferredSoftSkills.push('giao tiếp'); // Giá trị mặc định nếu không tìm thấy kỹ năng mềm
+                        }
+
+                        return { requiredSkills, preferredSoftSkills };
+                };
+
+                // Trích xuất kỹ năng từ yêu cầu công việc
+                const { requiredSkills, preferredSoftSkills } = extractSkillsFromJobRequirement(
+                        job.requirement
+                );
+                console.log(
+                        `[compareCompetitiveness] Extracted requiredSkills: ${requiredSkills}, preferredSoftSkills: ${preferredSoftSkills}`
+                );
 
                 const analysisPrompt = `
                     Hãy phân tích mức độ cạnh tranh của ứng viên dựa trên thông tin CV, yêu cầu công việc và dữ liệu từ các ứng viên khác đã ứng tuyển. Trả lời bằng tiếng Việt, sử dụng giọng điệu thân thiện, chuyên nghiệp và chi tiết. Đảm bảo phản hồi có độ dài tối thiểu 2000 ký tự để cung cấp phân tích sâu sắc, không bỏ sót bất kỳ khía cạnh nào. Dưới đây là thông tin chi tiết để phân tích:
@@ -793,8 +806,8 @@ export class UserService {
                     
                     2. **Yêu cầu công việc**:
                     - Tiêu đề: <key>${job.title}</key>
-                    - Kỹ năng bắt buộc: <key>HTML</key>, <key>CSS</key>, <key>JavaScript</key>, <key>React.js</key> hoặc <key>Vue.js</key>, hiểu biết cơ bản về <key>REST API</key>.
-                    - Kỹ năng ưu tiên: Kinh nghiệm với quy trình <key>Agile/Scrum</key>, <key>làm việc nhóm</key>, <key>giao tiếp</key> tốt với team backend.
+                    - Kỹ năng bắt buộc: ${requiredSkills.map((skill) => `<key>${skill}</key>`).join(', ')}.
+                    - Kỹ năng ưu tiên: ${preferredSoftSkills.map((skill) => `<key>${skill}</key>`).join(', ')}.
                     - Kinh nghiệm: 0-1 năm (Fresher), ưu tiên ứng viên có dự án thực tế hoặc thực tập.
                     - Học vấn: Tốt nghiệp hoặc đang học CNTT hoặc ngành liên quan.
                     - Mức lương đề xuất: $12,000 - $18,000/năm (tùy kinh nghiệm và kỹ năng).
@@ -806,8 +819,10 @@ export class UserService {
                     - Ứng viên ${index + 1}: ${applicant.name}
                         - Kỹ năng: ${applicant.skills}
                         - Kinh nghiệm: ${applicant.experienceLevel}
+                        - Số năm kinh nghiệm: ${applicant.yearOfNumberExperience}
                         - Học vấn: ${applicant.education}
-                        - Kỹ năng mềm: Không có thông tin cụ thể trừ khi được đề cập trong kinh nghiệm hoặc học vấn.
+                        - Bằng cấp cao nhất: ${applicant.highestDegree}
+                        - Vị trí mong muốn: ${applicant.jobTitle}
                     `
                             )
                             .join('\n')}
@@ -870,11 +885,11 @@ export class UserService {
                     ## 6. Xếp hạng chung
                     - **Danh sách xếp hạng** (hiển thị dưới dạng bảng với các cột: "Xếp hạng chung", "Tổng", "Kỹ năng", "Kinh nghiệm", "Kỹ năng mềm", "Học vấn"):
                     | Xếp hạng chung | Tổng | Kỹ năng | Kinh nghiệm | Kỹ năng mềm | Học vấn |
-                    |----------------|------|---------|-------------|---------|---------|
-                    | Bạn Top 1      | X%   | X%      | X%          | X%      | X%      |
-                    | Ứng viên Top 2 | X%   | X%      | X%          | X%      | X%      |
-                    | Ứng viên Top 3 | X%   | X%      | X%          | X%      | X%      |
-                    | ...            | ...  | ...     | ...         | ...     | ...     |
+                    |----------------|------|---------|-------------|-------------|---------|
+                    | Bạn Top 1      | X%   | X%      | X%          | X%          | X%      |
+                    | Ứng viên Top 2 | X%   | X%      | X%          | X%          | X%      |
+                    | Ứng viên Top 3 | X%   | X%      | X%          | X%          | X%      |
+                    | ...            | ...  | ...     | ...         | ...         | ...     |
                     
                     ## 7. Kết luận
                     ...
@@ -951,18 +966,202 @@ export class UserService {
                                 7;
                         const correctedFit = parseFloat(calculatedFit.toFixed(1));
 
-                        // Giả lập giá trị phần trăm cho các ứng viên khác (vì thông tin của họ hạn chế)
-                        const otherApplicantsPercentages = otherApplicantsInfo.map(
-                                (applicant, index) => ({
-                                        name: applicant.name,
-                                        technicalStrength: 20 + index * 10, // Giả lập: 20%, 30%, ...
-                                        experienceStrength: 20 + index * 10,
-                                        softSkillsStrength: 20 + index * 10,
-                                        educationScore: 20 + index * 10,
-                                        realExperienceScore: 20 + index * 10,
-                                        jobRequirementMatch: 20 + index * 10,
-                                        competitorComparison: 20 + index * 10,
-                                })
+                        // Hàm đánh giá các ứng viên khác dựa trên thông tin từ entity User
+                        const evaluateApplicant = (
+                                applicant: any,
+                                requiredSkills: string[],
+                                preferredSoftSkills: string[]
+                        ): Record<string, number> => {
+                                // Đánh giá kỹ năng kỹ thuật (technicalStrength)
+                                let technicalStrength = 0;
+                                if (
+                                        applicant.skills &&
+                                        applicant.skills !== 'Không có thông tin kỹ năng'
+                                ) {
+                                        const skills = applicant.skills.toLowerCase();
+                                        const matchedSkills = requiredSkills.filter((skill) =>
+                                                skills.includes(skill.toLowerCase())
+                                        );
+                                        technicalStrength =
+                                                (matchedSkills.length / requiredSkills.length) *
+                                                100;
+                                } else {
+                                        technicalStrength = 20; // Giá trị mặc định nếu không có thông tin
+                                        console.log(
+                                                `[evaluateApplicant] ${applicant.name}: No skills info, defaulting technicalStrength to 20%`
+                                        );
+                                }
+
+                                // Đánh giá kinh nghiệm (experienceStrength và realExperienceScore)
+                                let experienceStrength = 0;
+                                let realExperienceScore = 0;
+                                if (
+                                        applicant.experienceLevel &&
+                                        applicant.experienceLevel !==
+                                                'Không có thông tin kinh nghiệm'
+                                ) {
+                                        const expLevel = applicant.experienceLevel.toLowerCase();
+                                        if (expLevel.includes('senior')) {
+                                                experienceStrength = 90;
+                                                realExperienceScore = 90;
+                                        } else if (
+                                                expLevel.includes('mid-level') ||
+                                                expLevel.includes('nhân viên')
+                                        ) {
+                                                experienceStrength = 60;
+                                                realExperienceScore = 60;
+                                        } else if (
+                                                expLevel.includes('junior') ||
+                                                expLevel.includes('thực tập')
+                                        ) {
+                                                experienceStrength = 30;
+                                                realExperienceScore = 30;
+                                        } else {
+                                                experienceStrength = 20;
+                                                realExperienceScore = 20;
+                                        }
+
+                                        // Điều chỉnh dựa trên số năm kinh nghiệm (yearOfNumberExperience)
+                                        if (
+                                                applicant.yearOfNumberExperience &&
+                                                applicant.yearOfNumberExperience !==
+                                                        'Không có thông tin số năm kinh nghiệm'
+                                        ) {
+                                                const years = parseFloat(
+                                                        applicant.yearOfNumberExperience
+                                                );
+                                                if (!isNaN(years)) {
+                                                        if (years >= 5) {
+                                                                experienceStrength = Math.min(
+                                                                        experienceStrength + 20,
+                                                                        100
+                                                                );
+                                                                realExperienceScore = Math.min(
+                                                                        realExperienceScore + 20,
+                                                                        100
+                                                                );
+                                                        } else if (years >= 2) {
+                                                                experienceStrength = Math.min(
+                                                                        experienceStrength + 10,
+                                                                        100
+                                                                );
+                                                                realExperienceScore = Math.min(
+                                                                        realExperienceScore + 10,
+                                                                        100
+                                                                );
+                                                        }
+                                                }
+                                        }
+                                } else {
+                                        experienceStrength = 20;
+                                        realExperienceScore = 20;
+                                        console.log(
+                                                `[evaluateApplicant] ${applicant.name}: No experience info, defaulting experienceStrength and realExperienceScore to 20%`
+                                        );
+                                }
+
+                                // Đánh giá kỹ năng mềm (softSkillsStrength)
+                                let softSkillsStrength = 0;
+                                if (
+                                        applicant.skills &&
+                                        applicant.skills !== 'Không có thông tin kỹ năng'
+                                ) {
+                                        const skills = applicant.skills.toLowerCase();
+                                        const matchedSoftSkills = preferredSoftSkills.filter(
+                                                (skill) => skills.includes(skill.toLowerCase())
+                                        );
+                                        softSkillsStrength =
+                                                (matchedSoftSkills.length /
+                                                        preferredSoftSkills.length) *
+                                                100;
+                                } else {
+                                        softSkillsStrength = 20; // Giá trị mặc định nếu không có thông tin
+                                        console.log(
+                                                `[evaluateApplicant] ${applicant.name}: No soft skills info, defaulting softSkillsStrength to 20%`
+                                        );
+                                }
+
+                                // Đánh giá học vấn (educationScore)
+                                let educationScore = 0;
+                                if (
+                                        applicant.highestDegree &&
+                                        applicant.highestDegree !==
+                                                'Không có thông tin bằng cấp cao nhất'
+                                ) {
+                                        const degree = applicant.highestDegree.toLowerCase();
+                                        if (degree.includes('tiến sĩ') || degree.includes('phd')) {
+                                                educationScore = 100;
+                                        } else if (
+                                                degree.includes('thạc sĩ') ||
+                                                degree.includes('master')
+                                        ) {
+                                                educationScore = 90;
+                                        } else if (
+                                                degree.includes('đại học') ||
+                                                degree.includes('bachelor')
+                                        ) {
+                                                educationScore = 80;
+                                        } else if (
+                                                degree.includes('cao đẳng') ||
+                                                degree.includes('associate')
+                                        ) {
+                                                educationScore = 60;
+                                        } else {
+                                                educationScore = 40;
+                                        }
+                                } else {
+                                        educationScore = 40; // Giá trị mặc định nếu không có thông tin
+                                        console.log(
+                                                `[evaluateApplicant] ${applicant.name}: No education info, defaulting educationScore to 40%`
+                                        );
+                                }
+
+                                // Đánh giá mức độ phù hợp với yêu cầu công việc (jobRequirementMatch)
+                                let jobRequirementMatch = 0;
+                                if (
+                                        applicant.skills &&
+                                        applicant.skills !== 'Không có thông tin kỹ năng'
+                                ) {
+                                        const skills = applicant.skills.toLowerCase();
+                                        const matchedRequiredSkills = requiredSkills.filter(
+                                                (skill) => skills.includes(skill.toLowerCase())
+                                        );
+                                        const matchedPreferredSkills = preferredSoftSkills.filter(
+                                                (skill) => skills.includes(skill.toLowerCase())
+                                        );
+                                        jobRequirementMatch =
+                                                ((matchedRequiredSkills.length /
+                                                        requiredSkills.length) *
+                                                        0.7 +
+                                                        (matchedPreferredSkills.length /
+                                                                preferredSoftSkills.length) *
+                                                                0.3) *
+                                                100;
+                                } else {
+                                        jobRequirementMatch = 20; // Giá trị mặc định nếu không có thông tin
+                                        console.log(
+                                                `[evaluateApplicant] ${applicant.name}: No skills info, defaulting jobRequirementMatch to 20%`
+                                        );
+                                }
+
+                                // Đánh giá so sánh với ứng viên khác (competitorComparison)
+                                // Sẽ được tính sau khi có điểm của tất cả ứng viên
+                                const competitorComparison = 0; // Placeholder, sẽ được cập nhật sau
+
+                                return {
+                                        technicalStrength,
+                                        experienceStrength,
+                                        softSkillsStrength,
+                                        educationScore,
+                                        realExperienceScore,
+                                        jobRequirementMatch,
+                                        competitorComparison,
+                                };
+                        };
+
+                        // Đánh giá các ứng viên khác
+                        const otherApplicantsPercentages = otherApplicantsInfo.map((applicant) =>
+                                evaluateApplicant(applicant, requiredSkills, preferredSoftSkills)
                         );
 
                         // Tính tổng điểm cho từng ứng viên
@@ -972,25 +1171,53 @@ export class UserService {
                                         totalScore: correctedFit,
                                         percentages,
                                 },
-                                ...otherApplicantsPercentages.map((applicant) => ({
-                                        name: applicant.name,
-                                        totalScore: parseFloat(
+                                ...otherApplicantsPercentages.map((applicantPercentages, index) => {
+                                        const totalScore = parseFloat(
                                                 (
-                                                        (applicant.technicalStrength +
-                                                                applicant.experienceStrength +
-                                                                applicant.softSkillsStrength +
-                                                                applicant.educationScore +
-                                                                applicant.realExperienceScore +
-                                                                applicant.jobRequirementMatch +
-                                                                applicant.competitorComparison) /
+                                                        (applicantPercentages.technicalStrength +
+                                                                applicantPercentages.experienceStrength +
+                                                                applicantPercentages.softSkillsStrength +
+                                                                applicantPercentages.educationScore +
+                                                                applicantPercentages.realExperienceScore +
+                                                                applicantPercentages.jobRequirementMatch +
+                                                                applicantPercentages.competitorComparison) /
                                                         7
                                                 ).toFixed(1)
-                                        ),
-                                        percentages: applicant,
-                                })),
+                                        );
+                                        return {
+                                                name: otherApplicantsInfo[index].name,
+                                                totalScore,
+                                                percentages: applicantPercentages,
+                                        };
+                                }),
                         ];
 
                         // Sắp xếp theo tổng điểm (từ cao đến thấp)
+                        applicantsWithScores.sort((a, b) => b.totalScore - a.totalScore);
+
+                        // Cập nhật competitorComparison dựa trên xếp hạng
+                        applicantsWithScores.forEach((applicant, index) => {
+                                const rank = index + 1;
+                                const total = applicantsWithScores.length;
+                                applicant.percentages.competitorComparison = parseFloat(
+                                        (((total - rank + 1) / total) * 100).toFixed(1)
+                                );
+                                applicant.totalScore = parseFloat(
+                                        (
+                                                (applicant.percentages.technicalStrength +
+                                                        applicant.percentages.experienceStrength +
+                                                        applicant.percentages.softSkillsStrength +
+                                                        applicant.percentages.educationScore +
+                                                        applicant.percentages.realExperienceScore +
+                                                        applicant.percentages.jobRequirementMatch +
+                                                        applicant.percentages
+                                                                .competitorComparison) /
+                                                7
+                                        ).toFixed(1)
+                                );
+                        });
+
+                        // Sắp xếp lại sau khi cập nhật competitorComparison
                         applicantsWithScores.sort((a, b) => b.totalScore - a.totalScore);
 
                         // Xác định xếp hạng của Huỳnh Nam
@@ -1002,6 +1229,7 @@ export class UserService {
                                 ) + 1;
                         const totalRank = totalApplicants;
 
+                        // Tạo bảng xếp hạng chi tiết
                         // Tạo bảng xếp hạng chi tiết
                         const rankingTable = applicantsWithScores
                                 .map((applicant, index) => {
@@ -1099,5 +1327,69 @@ export class UserService {
                                 'Có lỗi khi phân tích CV. Vui lòng kiểm tra file và thử lại.'
                         );
                 }
+        }
+
+        //Apply Job
+        async applyJob(
+                userId: number,
+                jobId: number,
+                resumeCVId?: number,
+                letterIntroduction?: string
+        ): Promise<JobApplication> {
+                const user = await this.userRepository.findOne({ where: { userId } });
+                if (!user) {
+                        throw new NotFoundException('Người dùng không tồn tại');
+                }
+
+                const job = await this.jobRepository.findOne({ where: { jobId } });
+                if (!job) {
+                        throw new NotFoundException('Công việc không tồn tại');
+                }
+
+                // Kiểm tra ứng tuyển với điều kiện resumeCVId khác
+                const existingApplication = await this.jobApplicationRepository.findOne({
+                        where: {
+                                user: { userId },
+                                job: { jobId },
+                                resumeCVId: resumeCVId, // Thêm điều kiện resumeCVId
+                        },
+                });
+                if (existingApplication) {
+                        throw new ConflictException(
+                                'Bạn đã ứng tuyển công việc này với CV này rồi'
+                        );
+                }
+
+                let selectedResume: ResumeCV | null = null;
+                if (resumeCVId !== undefined) {
+                        selectedResume = await this.resumeRepository.findOne({
+                                where: { resumeCVId, user: { userId } },
+                        });
+                        if (!selectedResume) {
+                                throw new NotFoundException(
+                                        'CV không tồn tại hoặc không thuộc về bạn'
+                                );
+                        }
+                } else {
+                        selectedResume = await this.resumeRepository.findOne({
+                                where: { user: { userId }, isDefault: true },
+                        });
+                        if (!selectedResume) {
+                                throw new BadRequestException(
+                                        'Bạn chưa có CV mặc định để ứng tuyển'
+                                );
+                        }
+                }
+
+                const application = this.jobApplicationRepository.create({
+                        user,
+                        job,
+                        resumeCVId: selectedResume.resumeCVId,
+                        letter_introduction: letterIntroduction || '', // Lưu letter_introduction, mặc định là chuỗi rỗng nếu không có
+                        status: 'Pending',
+                        applied_at: new Date(),
+                });
+
+                return await this.jobApplicationRepository.save(application);
         }
 }

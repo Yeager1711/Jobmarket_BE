@@ -25,6 +25,7 @@ import { AuthUserModule } from './modules/auth/login/login_user.module';
 import { UserModule } from './modules/auth/user/user.module';
 import { AuthMiddleware } from './middlewares//auth/auth.middleware';
 import { FavoriteJobModule } from './modules/favorite_Job/fv_job.module';
+import { AppliedJobModule } from './modules/applied_Job/applied_job.module';
 import { PayOSModule } from './modules/auth/payment/payos/payos.module';
 import { OrderModule } from './modules/auth/orders/order.module';
 // Log environment variables to check if they are loaded correctly
@@ -58,6 +59,7 @@ console.log('DB Config:', {
                 AuthUserModule,
                 UserModule,
                 FavoriteJobModule,
+                AppliedJobModule,
                 PayOSModule,
                 OrderModule,
         ],
@@ -85,7 +87,6 @@ export class AppModule implements NestModule {
                                 method: RequestMethod.POST,
                         },
 
-                       
                         {
                                 path: 'orders/user-orders',
                                 method: RequestMethod.GET,
@@ -97,6 +98,13 @@ export class AppModule implements NestModule {
                                 method: RequestMethod.PATCH,
                         },
 
+                        //apply job
+                        {
+                                path: 'applied/apply-job',
+                                method: RequestMethod.POST,
+                        },
+
+                        { path: 'applied/user-applied', method: RequestMethod.GET },
                 );
         }
 }
