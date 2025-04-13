@@ -122,6 +122,7 @@ export class AppliedJobService {
                                         title: true,
                                         salary_from: true,
                                         salary_to: true,
+                                        salary: true,
                                         expire_on: true,
                                         work_time: true,
                                         view: true,

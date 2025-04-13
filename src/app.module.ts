@@ -19,7 +19,6 @@ import { ResumeCV } from './entities/resumecv.entity';
 
 // Import modules
 import { JobModule } from './modules/job/job.module';
-import { ChatGptModule } from './modules/job/chat-gpt/chat-gpt.module';
 import { AuthModule } from './modules/auth/register/auth.module';
 import { AuthUserModule } from './modules/auth/login/login_user.module';
 import { UserModule } from './modules/auth/user/user.module';
@@ -28,6 +27,12 @@ import { FavoriteJobModule } from './modules/favorite_Job/fv_job.module';
 import { AppliedJobModule } from './modules/applied_Job/applied_job.module';
 import { PayOSModule } from './modules/auth/payment/payos/payos.module';
 import { OrderModule } from './modules/auth/orders/order.module';
+
+//Recruitment
+import { AuthReCuitmentRegister_Module } from './modules/recuritment/auth/register/recruitment_auth.module';
+import { AuthRecuitmentLogin_Module } from './modules/recuritment/auth/login/login_recruitment.module';
+import { RecruitmentCompany_Module } from './modules/recuritment/company/company_recruitment.module';
+
 // Log environment variables to check if they are loaded correctly
 console.log('DB Config:', {
         host: process.env.DB_HOST,
@@ -54,7 +59,6 @@ console.log('DB Config:', {
                         synchronize: false,
                 }),
                 JobModule,
-                ChatGptModule,
                 AuthModule,
                 AuthUserModule,
                 UserModule,
@@ -62,6 +66,11 @@ console.log('DB Config:', {
                 AppliedJobModule,
                 PayOSModule,
                 OrderModule,
+
+                //recruitment
+                AuthReCuitmentRegister_Module,
+                AuthRecuitmentLogin_Module,
+                RecruitmentCompany_Module,
         ],
 })
 export class AppModule implements NestModule {
@@ -74,9 +83,13 @@ export class AppModule implements NestModule {
                         { path: 'users/update-email', method: RequestMethod.PUT },
                         { path: 'users/change-password', method: RequestMethod.PUT },
                         { path: 'users/deleteUserCurrent', method: RequestMethod.DELETE },
+
+                        //favorite job
                         { path: 'favorite/favorite-job', method: RequestMethod.POST },
                         { path: 'favorite/user-favorites', method: RequestMethod.GET },
+                        { path: 'favorite/removeFavorite-Job', method: RequestMethod.DELETE },
 
+                        // AI
                         {
                                 path: '/users/analyze-competitiveness/:orderId/:jobId/:resumeCVId',
                                 method: RequestMethod.POST,
@@ -87,12 +100,12 @@ export class AppModule implements NestModule {
                                 method: RequestMethod.POST,
                         },
 
+                        // orrder
                         {
                                 path: 'orders/user-orders',
                                 method: RequestMethod.GET,
                         },
 
-                        //order disable
                         {
                                 path: 'orders/:orderId/disable',
                                 method: RequestMethod.PATCH,
@@ -105,6 +118,9 @@ export class AppModule implements NestModule {
                         },
 
                         { path: 'applied/user-applied', method: RequestMethod.GET },
+
+                        // ======================================= Recruitment =============================
+                        { path: 'recruitment/getRecuitmentId', method: RequestMethod.GET }
                 );
         }
 }

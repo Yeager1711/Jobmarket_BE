@@ -897,7 +897,7 @@ export class UserService {
 
                 const prompt = `${introPrompt}\n\n---\n\n${analysisPrompt}`;
                 console.log(
-                        `[compareCompetitiveness] Prompt sent to AI: ${prompt.substring(0, 1000)}...`
+                        `[compareCompetitiveness] Prompt sent to AI: ${prompt.substring(0, 2000)}...`
                 );
 
                 try {

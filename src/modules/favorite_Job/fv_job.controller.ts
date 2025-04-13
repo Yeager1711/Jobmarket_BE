@@ -4,6 +4,7 @@ import {
         Get,
         Body,
         Req,
+        Delete,
         UnauthorizedException,
         BadRequestException,
 } from '@nestjs/common';
@@ -31,7 +32,7 @@ export class FavoriteJobController {
                 return { message: 'Đã thêm công việc vào danh sách yêu thích', data: result };
         }
 
-        @Get('user-favorites') 
+        @Get('user-favorites')
         async getUserFavoriteJobs(@Req() req: Request) {
                 const userId = (req as any).user?.userId;
                 if (!userId) {
@@ -39,5 +40,22 @@ export class FavoriteJobController {
                 }
                 const favorites = await this.favoriteJobService.getUserFavoriteJobs(userId);
                 return { message: 'Danh sách công việc yêu thích', data: favorites };
+        }
+
+        @Delete('removeFavorite-Job')
+        async removeFavoriteJob(@Req() req: Request, @Body() body: { jobId: number }) {
+                const userId = (req as any).user?.userId;
+
+                if (!userId) {
+                        throw new UnauthorizedException('Unauthorized: User ID missing');
+                }
+
+                const { jobId } = body;
+                if (!jobId) {
+                        throw new BadRequestException('JobId không được truyền từ Body');
+                }
+
+                await this.favoriteJobService.removeFavoriteJob(userId, jobId);
+                return { message: 'Đã xóa công việc khỏi danh sách yêu thích' };
         }
 }

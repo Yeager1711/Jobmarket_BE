@@ -69,7 +69,7 @@ export class FavoriteJobService {
                                 'job.workLocation',
                                 'job.workLocation.district',
                                 'job.company',
-                                'job.company.images', 
+                                'job.company.images',
                                 'job.jobLevel',
                                 'job.jobType',
                                 'job.jobIndustry',
@@ -80,7 +80,7 @@ export class FavoriteJobService {
                                 favoriteId: true,
                                 saved_at: true,
                                 user: {
-                                        userId: true
+                                        userId: true,
                                 },
                                 job: {
                                         jobId: true,
@@ -134,5 +134,31 @@ export class FavoriteJobService {
                 });
 
                 return favorites;
+        }
+
+        async removeFavoriteJob(userId: number, jobId: number): Promise<void> {
+                //Kiểm tra userId
+                const user = await this.userRepository.findOne({ where: { userId } });
+                if (!user) {
+                        throw new NotFoundException('Người dùng không tồn tại');
+                }
+
+                const job = await this.jobRepository.findOne({ where: { jobId } });
+                if (!job) {
+                        throw new NotFoundException('Công việc không tồn tại');
+                }
+
+                //Tìm yêu thích
+                const favorite = await this.jobFavoriteRepository.findOne({
+                        where: { user: { userId }, job: { jobId } },
+                });
+
+                if (!favorite) {
+                        throw new NotFoundException(
+                                'Công việc này không có trong danh sách yêu thích'
+                        );
+                }
+
+                await this.jobFavoriteRepository.remove(favorite)
         }
 }
