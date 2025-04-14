@@ -120,7 +120,9 @@ export class AppModule implements NestModule {
                         { path: 'applied/user-applied', method: RequestMethod.GET },
 
                         // ======================================= Recruitment =============================
-                        { path: 'recruitment/getRecuitmentId', method: RequestMethod.GET }
+                        { path: 'recruitment/getRecruitmentId', method: RequestMethod.GET },
+                        { path: 'recruitment/updateBannerBackground', method: RequestMethod.PATCH },
+                        { path: 'recruitment/updateCompanyLogo', method: RequestMethod.PATCH }
                 );
         }
 }

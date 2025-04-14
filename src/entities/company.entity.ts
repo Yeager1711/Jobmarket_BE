@@ -49,6 +49,48 @@ export class Company {
         jobs: Job[];
 }
 
+
+
+
+
+
+
+
+// import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
+// import { ImageCompany } from './imageCompany.entity';
+// import { WorkLocation } from './workLocation.entity';
+// import { Job } from './job.entity';
+
+// @Entity('company')
+// export class Company {
+//   @PrimaryColumn()
+//   companyId: number;
+
+//   @Column()
+//   name: string;
+
+//   @Column()
+//   created_at: Date;
+
+//   @Column()
+//   updated_at: Date;
+
+//   @Column()
+//   phoneNumber_company: number;
+
+//   @Column()
+//   recruitment: number;
+
+//   @OneToMany(() => ImageCompany, (image) => image.company)
+//   images: ImageCompany[];
+
+//   @OneToMany(() => WorkLocation, (workLocation) => workLocation.company)
+//   workLocations: WorkLocation[];
+
+//   @OneToMany(() => Job, (job) => job.company)
+//   jobs: Job[];
+// }
+
 // import {
 //         Entity,
 //         PrimaryColumn,
