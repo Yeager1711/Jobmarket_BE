@@ -1,3 +1,4 @@
+
 // company_recruitment.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -19,11 +20,10 @@ export class Recruitment_Company_Service {
                         where: { recruitment_Id: recruitmentId },
                         relations: [
                                 'company',
-                                'company.jobs',
-                                'company.jobs.jobIndustry',
                                 'company.workLocations',
                                 'company.workLocations.district',
                                 'company.images',
+                                'company.companyIndustries',
                         ],
                         select: {
                                 recruitment_Id: true,
@@ -38,14 +38,12 @@ export class Recruitment_Company_Service {
                                         created_at: true,
                                         updated_at: true,
                                         phoneNumber_company: true,
-                                        jobs: {
-                                                jobId: true,
-                                                title: true,
-                                                jobIndustry: {
-                                                        jobIndustryId: true,
-                                                        name: true,
-                                                },
+
+                                        companyIndustries: {
+                                                companyIndustry_ID: true,
+                                                name: true,
                                         },
+
                                         workLocations: {
                                                 workLocationId: true,
                                                 address_name: true,
@@ -59,7 +57,7 @@ export class Recruitment_Company_Service {
                                         images: {
                                                 companyId: true,
                                                 image_company: true,
-                                                banner_BackgroundImage_company: true, // Added field
+                                                banner_BackgroundImage_company: true,
                                         },
                                 },
                         },
@@ -69,17 +67,11 @@ export class Recruitment_Company_Service {
                         throw new NotFoundException('Recruitment not found');
                 }
 
-                const industries = [
-                        ...new Map(
-                                recruitment.company.jobs.map((job) => [
-                                        job.jobIndustry.jobIndustryId,
-                                        {
-                                                jobIndustryId: job.jobIndustry.jobIndustryId,
-                                                name: job.jobIndustry.name,
-                                        },
-                                ])
-                        ).values(),
-                ];
+                // Lấy danh sách industries từ jobs của company
+                const companyIndustries = recruitment.company.companyIndustries.map((industry) => ({
+                        companyIndustry_ID: industry.companyIndustry_ID,
+                        name: industry.name,
+                }));
 
                 return {
                         recruitment_Id: recruitment.recruitment_Id,
@@ -106,6 +98,8 @@ export class Recruitment_Company_Service {
                                                 },
                                         })
                                 ),
+                                companyIndustries,
+
                                 images: recruitment.company.images
                                         ? recruitment.company.images.map((image) => ({
                                                   companyId: image.companyId,

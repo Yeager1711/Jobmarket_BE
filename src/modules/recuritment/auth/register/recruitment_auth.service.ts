@@ -4,11 +4,12 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Recruitment } from '../../../../entities/recruitment.entity';
 import { Company } from '../../../../entities/company.entity';
-import { JobIndustry } from '../../../../entities/job_industry.entity';
+import { CompanyIndustry } from '../../../../entities/company_industry.entity';
 import { WorkLocation } from '../../../../entities/work_location.entity';
 import { District } from '../../../../entities/district.entity';
 import { User } from '../../../../entities/user.entity';
 import { RegisterRecruitment_Dto } from '../dto/register.dto';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
@@ -17,14 +18,15 @@ export class AuthService {
                 private recruitmentRepository: Repository<Recruitment>,
                 @InjectRepository(Company)
                 private companyRepository: Repository<Company>,
-                @InjectRepository(JobIndustry)
-                private jobIndustryRepository: Repository<JobIndustry>,
+                @InjectRepository(CompanyIndustry)
+                private companyIndustryRepository: Repository<CompanyIndustry>,
                 @InjectRepository(WorkLocation)
                 private workLocationRepository: Repository<WorkLocation>,
                 @InjectRepository(District)
                 private districtRepository: Repository<District>,
                 @InjectRepository(User)
-                private userRepository: Repository<User>
+                private userRepository: Repository<User>,
+                private emailService: EmailService
         ) {}
 
         async register(registerDto: RegisterRecruitment_Dto): Promise<Recruitment> {
@@ -37,6 +39,7 @@ export class AuthService {
                         industry,
                         firstName,
                         lastName,
+                        company_description,
                 } = registerDto;
 
                 // Log dữ liệu nhận được
@@ -48,6 +51,7 @@ export class AuthService {
                         industry,
                         firstName,
                         lastName,
+                        company_description,
                 });
 
                 // Kiểm tra tất cả các trường không được bỏ trống
@@ -74,6 +78,9 @@ export class AuthService {
                 }
                 if (!lastName) {
                         throw new BadRequestException('Tên không được để trống');
+                }
+                if (!company_description) {
+                        throw new BadRequestException('Mô tả công ty không được để trống');
                 }
 
                 // Kiểm tra định dạng mật khẩu
@@ -198,13 +205,29 @@ export class AuthService {
                                 );
                         } while (workLocationExists);
 
-                        // Luôn tạo JobIndustry mới với jobIndustryId = companyId
-                        const jobIndustry = queryRunner.manager.create(JobIndustry, {
-                                jobIndustryId: companyId, // Sử dụng companyId làm jobIndustryId
-                                name: industry,
+                        // Tạo Company trước
+                        const company = queryRunner.manager.create(Company, {
+                                companyId,
+                                name: companyName,
+                                phoneNumber_company,
+                                company_description,
+                                created_at: new Date(),
+                                updated_at: new Date(),
                         });
-                        await queryRunner.manager.save(jobIndustry);
-                        console.log('Đã lưu JobIndustry:', JSON.stringify(jobIndustry, null, 2));
+                        await queryRunner.manager.save(company);
+                        console.log('Đã lưu Company:', JSON.stringify(company, null, 2));
+
+                        // Luôn tạo CompanyIndustry mới với companyIndustry_ID = companyId
+                        const companyIndustry = queryRunner.manager.create(CompanyIndustry, {
+                                companyIndustry_ID: companyId,
+                                name: industry,
+                                company: { companyId },
+                        });
+                        await queryRunner.manager.save(companyIndustry);
+                        console.log(
+                                'Đã lưu CompanyIndustry:',
+                                JSON.stringify(companyIndustry, null, 2)
+                        );
 
                         // Xử lý địa chỉ
                         const addressParts = address.split(',').map((part: string) => part.trim());
@@ -238,17 +261,6 @@ export class AuthService {
                                 );
                         }
 
-                        // Tạo Company trước
-                        const company = queryRunner.manager.create(Company, {
-                                companyId,
-                                name: companyName,
-                                phoneNumber_company,
-                                created_at: new Date(),
-                                updated_at: new Date(),
-                        });
-                        await queryRunner.manager.save(company);
-                        console.log('Đã lưu Company:', JSON.stringify(company, null, 2));
-
                         // Mã hóa mật khẩu và tạo Recruitment sau
                         const hashedPassword = await bcrypt.hash(password, 10);
                         const recruitment = queryRunner.manager.create(Recruitment, {
@@ -273,9 +285,9 @@ export class AuthService {
                         // Tạo WorkLocation với quan hệ company và district
                         const workLocation = queryRunner.manager.create(WorkLocation, {
                                 workLocationId,
-                                company, // Gán đối tượng company để TypeORM điền companyId
+                                company,
                                 address_name: address,
-                                district, // Gán đối tượng district để TypeORM điền districtId
+                                district,
                                 created_at: new Date(),
                                 updated_at: new Date(),
                         });
@@ -292,6 +304,14 @@ export class AuthService {
                         console.log(
                                 'Đã lưu WorkLocation:',
                                 JSON.stringify(savedWorkLocation, null, 2)
+                        );
+
+                        // Gửi email xác nhận đã đăng ký thành công
+                        await this.emailService.sendRegistrationEmail(
+                                email_hr,
+                                firstName,
+                                lastName,
+                                companyName
                         );
 
                         await queryRunner.commitTransaction();

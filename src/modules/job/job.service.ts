@@ -11,6 +11,7 @@ import { WorkLocation } from '../../entities/work_location.entity';
 import { RefJob } from '../../entities/ref_job.entity';
 import { GeneralInformation } from '../../entities/general_information.entity';
 import { District } from '../../entities/district.entity';
+import { Recruitment } from 'src/entities/recruitment.entity';
 
 import { sortExperience } from './ultis/sort/sortExperience';
 import { WinstonLoggerService } from '../../common/logger';
@@ -49,7 +50,10 @@ export class JobService {
                 private readonly districtRepository: Repository<District>,
 
                 @InjectRepository(GeneralInformation)
-                private readonly generalInformationRepository: Repository<GeneralInformation>
+                private readonly generalInformationRepository: Repository<GeneralInformation>,
+
+                @InjectRepository(Recruitment)
+                private readonly recruitmentResponsitory: Repository<Recruitment>
         ) {}
 
         async saveJobData(jobData: any): Promise<Job> {
@@ -109,25 +113,6 @@ export class JobService {
                                 await queryRunner.manager.save(district);
                                 this.loggerWinston.info(
                                         `District ${jobData.district_name} created for jobId: ${jobData.job_Id}`
-                                );
-                        }
-
-                        // Thực hiện lưu thông tin WorkLocation
-                        let workLocation = await queryRunner.manager.findOne(WorkLocation, {
-                                where: { district: { districtId: district.districtId } },
-                                relations: ['district'],
-                        });
-
-                        if (!workLocation) {
-                                workLocation = queryRunner.manager.create(WorkLocation, {
-                                        workLocationId: jobData.job_Id,
-                                        address_name: jobData.address_name || 'Unknown',
-                                        district: district,
-                                        company: company,
-                                });
-                                await queryRunner.manager.save(workLocation);
-                                this.loggerWinston.info(
-                                        `WorkLocation created for jobId: ${jobData.job_Id}`
                                 );
                         }
 
@@ -247,7 +232,7 @@ export class JobService {
                                 jobLevel: jobLevel,
                                 jobType: jobType,
                                 jobIndustry: jobIndustry,
-                                workLocation: workLocation,
+                                // workLocation: workLocation,
                                 description: jobData.description,
                                 requirement: jobData.requirement,
                                 salary_from: jobData.salary_from,
@@ -815,8 +800,13 @@ export class JobService {
                         const jobIndustries = await this.jobIndustryRepository.find();
                         const industryNames = jobIndustries.map((industry) => industry.name);
 
-                        //loại bỏ  trùng lặp
-                        const uniqueIndustryNames = [...new Set(industryNames)];
+                        // Split comma-separated industries and flatten the array
+                        const splitIndustryNames = industryNames
+                                .flatMap((name) => name.split(', ').map((item) => item.trim()))
+                                .filter((name) => name.length > 0);
+
+                        //remove Duplicates name industry
+                        const uniqueIndustryNames = [...new Set(splitIndustryNames)];
                         return uniqueIndustryNames;
                 } catch (error) {
                         this.loggerWinston.error(
@@ -824,6 +814,255 @@ export class JobService {
                                 error.stack
                         );
                         throw new Error(`Error retrieving job industries: ${error.message}`);
+                }
+        }
+
+        async postCompanyJob(jobData: any): Promise<Job> {
+                const queryRunner = this.jobRepository.manager.connection.createQueryRunner();
+                await queryRunner.startTransaction();
+
+                try {
+                        this.loggerWinston.log(
+                                `BE Service: Processing company job post for title: ${jobData.title}`
+                        );
+                        console.log(
+                                'BE Service: Nhận được jobData từ frontend:',
+                                JSON.stringify(jobData, null, 2)
+                        );
+
+                        // Kiểm tra các trường bắt buộc
+                        if (
+                                !jobData.title ||
+                                !jobData.companyId ||
+                                !jobData.address_name ||
+                                !jobData.district_name
+                        ) {
+                                console.error(
+                                        'BE Service: Validation failed - Missing required fields:',
+                                        {
+                                                title: jobData.title,
+                                                companyId: jobData.companyId,
+                                                address_name: jobData.address_name,
+                                                district_name: jobData.district_name,
+                                        }
+                                );
+                                this.loggerWinston.error('Missing required fields');
+                                throw new Error(
+                                        'Missing required fields: title, companyId, address_name, district_name'
+                                );
+                        }
+
+                        // Xác thực recruitmentId và companyId
+                        const recruitment = await queryRunner.manager.findOne(Recruitment, {
+                                where: {
+                                        recruitment_Id: jobData.recruitmentId,
+                                        companyId: jobData.companyId,
+                                },
+                        });
+                        if (!recruitment) {
+                                console.error('BE Service: Invalid recruitmentId or companyId:', {
+                                        recruitmentId: jobData.recruitmentId,
+                                        companyId: jobData.companyId,
+                                });
+                                this.loggerWinston.error('Invalid recruitmentId or companyId');
+                                throw new Error('Invalid recruitmentId or companyId');
+                        }
+                        console.log('BE Service: Validated recruitment:', recruitment);
+
+                        // Tìm công ty
+                        const company = await queryRunner.manager.findOne(Company, {
+                                where: { companyId: jobData.companyId },
+                                relations: ['workLocations'],
+                        });
+                        if (!company) {
+                                console.error('BE Service: Company not found:', jobData.companyId);
+                                this.loggerWinston.error(
+                                        `Company with ID ${jobData.companyId} not found`
+                                );
+                                throw new Error(`Company with ID ${jobData.companyId} not found`);
+                        }
+                        console.log('BE Service: Found company:', company);
+
+                        // Tìm WorkLocation hiện có
+                        let workLocation = await queryRunner.manager.findOne(WorkLocation, {
+                                where: {
+                                        company: { companyId: jobData.companyId },
+                                        address_name: jobData.address_name,
+                                },
+                                relations: ['company', 'district'],
+                        });
+
+                        if (!workLocation) {
+                                this.loggerWinston.error(
+                                        `No WorkLocation found for company ${jobData.companyId} with address ${jobData.address_name}`
+                                );
+                                throw new Error(
+                                        'No matching WorkLocation found for the provided address'
+                                );
+                        }
+                        console.log('BE Service: Found workLocation:', workLocation);
+
+                      
+
+                        // Tạo jobId duy nhất
+                        let jobId: number;
+                        const maxAttempts = 5;
+                        let attempts = 0;
+                        const MAX_INT = 2147483647; // Giới hạn của INT có dấu
+
+                        do {
+                                jobId = Math.floor(Math.random() * MAX_INT) + 1;
+                                attempts++;
+
+                                const existingJob = await queryRunner.manager.findOne(Job, {
+                                        where: { jobId },
+                                });
+
+                                if (!existingJob) {
+                                        break;
+                                }
+
+                                if (attempts >= maxAttempts) {
+                                        throw new Error(
+                                                'Unable to generate a unique jobId after multiple attempts'
+                                        );
+                                }
+                        } while (true);
+
+                        console.log('BE Service: Generated jobId:', jobId);
+
+                        // Tìm hoặc tạo JobIndustry
+                        let jobIndustry = await queryRunner.manager.findOne(JobIndustry, {
+                                where: { name: jobData.jobIndustry },
+                        });
+                        if (!jobIndustry) {
+                                // Tạo jobIndustryId duy nhất
+                                let jobIndustryId: number;
+                                attempts = 0;
+                                do {
+                                        jobIndustryId = Math.floor(Math.random() * MAX_INT) + 1;
+                                        attempts++;
+
+                                        const existingJobIndustry =
+                                                await queryRunner.manager.findOne(JobIndustry, {
+                                                        where: { jobIndustryId },
+                                                });
+
+                                        if (!existingJobIndustry) {
+                                                break;
+                                        }
+
+                                        if (attempts >= maxAttempts) {
+                                                throw new Error(
+                                                        'Unable to generate a unique jobIndustryId after multiple attempts'
+                                                );
+                                        }
+                                } while (true);
+
+                                jobIndustry = queryRunner.manager.create(JobIndustry, {
+                                        jobIndustryId,
+                                        name: jobData.jobIndustry,
+                                });
+                                await queryRunner.manager.save(jobIndustry);
+                                this.loggerWinston.info(
+                                        `JobIndustry ${jobData.jobIndustry} created`
+                                );
+                                console.log('BE Service: Created jobIndustry:', jobIndustry);
+                        } else {
+                                console.log('BE Service: Found jobIndustry:', jobIndustry);
+                        }
+
+                        // Tìm hoặc tạo JobType
+                        let jobType = await queryRunner.manager.findOne(JobType, {
+                                where: { name: jobData.work_at_name },
+                        });
+                        if (!jobType) {
+                                jobType = queryRunner.manager.create(JobType, {
+                                        name: jobData.work_at_name,
+                                        work_at: jobData.work_at || 'undetermined',
+                                });
+                                await queryRunner.manager.save(jobType);
+                                this.loggerWinston.info(`JobType ${jobData.work_at_name} created`);
+                                console.log('BE Service: Created jobType:', jobType);
+                        } else {
+                                console.log('BE Service: Found jobType:', jobType);
+                        }
+
+                        // Tìm hoặc tạo JobLevel
+                        let jobLevel = await queryRunner.manager.findOne(JobLevel, {
+                                where: { name: jobData.experience },
+                        });
+                        if (!jobLevel) {
+                                jobLevel = queryRunner.manager.create(JobLevel, {
+                                        name: jobData.levels,
+                                });
+                                await queryRunner.manager.save(jobLevel);
+                                this.loggerWinston.info(`JobLevel ${jobData.experience} created`);
+                                console.log('BE Service: Created jobLevel:', jobLevel);
+                        } else {
+                                console.log('BE Service: Found jobLevel:', jobLevel);
+                        }
+
+                        // Tạo GeneralInformation
+                        const generalInformation = queryRunner.manager.create(GeneralInformation, {
+                                general_Information_Id: jobId,
+                                numberOfRecruits: jobData.numHires || 1,
+                                gender: jobData.gender || 'Không yêu cầu',
+                                tech_stack: jobData.techStacks || [],
+                                experience: jobData.experience,
+                        });
+                        await queryRunner.manager.save(generalInformation);
+                        this.loggerWinston.info(`GeneralInformation created for job`);
+                        console.log('BE Service: Created generalInformation:', generalInformation);
+
+                        // Tạo Job
+                        const job = queryRunner.manager.create(Job, {
+                                jobId: jobId,
+                                title: jobData.title,
+                                jobLevel,
+                                jobType,
+                                jobIndustry,
+                                workLocation,
+                                generalInformation,
+                                company,
+                                salary: jobData.salaryFrom +'VND' + 'to' + jobData.salaryTo + 'VND',
+                                salary_from:
+                                        jobData.salaryType === 'Thương lượng'
+                                                ? 0
+                                                : jobData.salaryFrom,
+                                salary_to:
+                                        jobData.salaryType === 'Thương lượng'
+                                                ? 0
+                                                : jobData.salaryTo,
+                                description: jobData.descriptions,
+                                requirement: jobData.requirements,
+                                benefits: jobData.benefits,
+                                expire_on: jobData.deadline ? new Date(jobData.deadline) : null,
+                                work_time: jobData.workTime || 'undetermined',
+                                view: 0,
+                                Hot_Job: 'Null',
+                                created_at: new Date(),
+                                updated_at: new Date(),
+                        });
+
+                        await queryRunner.manager.save(job);
+                        await queryRunner.commitTransaction();
+                        this.loggerWinston.info(
+                                `Job posted successfully with title: ${jobData.title}`
+                        );
+                        console.log('BE Service: Job saved successfully:', job);
+
+                        return job;
+                } catch (error) {
+                        await queryRunner.rollbackTransaction();
+                        this.loggerWinston.error(
+                                `Error posting job: ${error.message}`,
+                                error.stack
+                        );
+                        console.error('BE Service: Error posting job:', error.message);
+                        throw error;
+                } finally {
+                        await queryRunner.release();
                 }
         }
 }

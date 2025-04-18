@@ -12,7 +12,7 @@ import { WorkLocation } from '../../entities/work_location.entity';
 import { RefJob } from '../../entities/ref_job.entity';
 import { GeneralInformation } from '../../entities/general_information.entity';  
 import { District } from '../../entities/district.entity';  
-
+import { Recruitment } from 'src/entities/recruitment.entity';
 
 @Module({
   imports: [
@@ -27,6 +27,7 @@ import { District } from '../../entities/district.entity';
       RefJob,
       District,
       GeneralInformation,
+      Recruitment
     ]),
   ],
   controllers: [JobController],
