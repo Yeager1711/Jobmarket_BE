@@ -8,6 +8,8 @@ import {
         HttpStatus,
         UseInterceptors,
         UploadedFile,
+        Param,
+        Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request, Response } from 'express';
@@ -39,6 +41,34 @@ export class Recruitment_CompanyController {
                         return res
                                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                                 .json({ message: 'Error fetching recruitment data' });
+                }
+        }
+
+        @Get('company/:companyId/jobs')
+        async getJobsByCompanyId(
+                @Req() req: Request,
+                @Param('companyId') companyId: string,
+                @Res() res: Response
+        ) {
+                try {
+                        const recruitmentId = (req as any).user?.recruitmentId;
+
+                        if (!recruitmentId) {
+                                return res
+                                        .status(HttpStatus.UNAUTHORIZED)
+                                        .json({ message: 'Unauthorized' });
+                        }
+
+                        const jobs = await this.recruitmentService.getCompanyId(
+                                recruitmentId,
+                                +companyId // Convert string to number
+                        );
+                        return res.status(HttpStatus.OK).json(jobs);
+                } catch (error) {
+                        console.error('Lỗi khi lấy danh sách job:', error.message);
+                        return res
+                                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .json({ message: 'Error fetching jobs data' });
                 }
         }
 
@@ -167,6 +197,48 @@ export class Recruitment_CompanyController {
                         console.error('Error updating company logo:', error.message);
                         return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
                                 message: 'Error updating company logo',
+                        });
+                }
+        }
+
+        @Patch('updateCompanyInfo')
+        async updateCompanyInfo(
+                @Req() req: Request,
+                @Res() res: Response,
+                @Body()
+                updateData: {
+                        name_company?: string;
+                        phoneNumber_company?: string;
+                        company_description?: string;
+                        industries?: string[];
+                        address_name?: string;
+                        companyTaxIdentificationNumber?: string;
+                        companySize?: string;
+                        personalTaxCode?: string;
+                }
+        ) {
+                try {
+                        const recruitmentId = (req as any).user?.recruitmentId;
+
+                        if (!recruitmentId) {
+                                return res
+                                        .status(HttpStatus.UNAUTHORIZED)
+                                        .json({ message: 'Unauthorized' });
+                        }
+
+                        const updatedCompany = await this.recruitmentService.updateCompanyInfo(
+                                recruitmentId,
+                                updateData
+                        );
+
+                        return res.status(HttpStatus.OK).json({
+                                message: 'Company information updated successfully',
+                                company: updatedCompany,
+                        });
+                } catch (error) {
+                        console.error('Error updating company information:', error.message);
+                        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+                                message: 'Error updating company information',
                         });
                 }
         }

@@ -5,7 +5,7 @@ import { Company } from './company.entity';
 export class ImageCompany {
         @PrimaryColumn()
         ImageCompanyId: number;
-        
+
         @PrimaryColumn()
         companyId: number; // Use companyId as the primary column to match the schema
 
@@ -13,10 +13,12 @@ export class ImageCompany {
         @JoinColumn({ name: 'companyId' })
         company: Company;
 
-        @Column({ type: 'longtext', nullable: true }) // Allow NULL
+        @Column({ type: 'longtext', nullable: true }) 
         image_company: string;
 
-        @Column({ type: 'longtext', nullable: true }) // Allow NULL
+        @Column({ type: 'longtext', nullable: true }) 
         banner_BackgroundImage_company: string;
-}
 
+        @Column({ type: 'varchar', nullable: true }) 
+        Business_documents: string;
+}

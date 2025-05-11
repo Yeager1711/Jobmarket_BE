@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from '../../entities/job.entity';
@@ -771,26 +771,164 @@ export class JobService {
                 }
         }
 
-        async getJobsByNameCompany(name: string): Promise<Job[]> {
+        async getJobsByNameCompany(name: string): Promise<any> {
                 try {
-                        // Use QueryBuilder for more complex queries
-                        const jobs = await this.jobRepository
-                                .createQueryBuilder('job')
-                                .leftJoinAndSelect('job.workLocation', 'workLocation')
-                                .leftJoinAndSelect('workLocation.district', 'district')
-                                .leftJoinAndSelect('job.company', 'company')
+                        // Fetch the company with related data using QueryBuilder
+                        const company = await this.companyRepository
+                                .createQueryBuilder('company')
+                                .leftJoinAndSelect('company.jobs', 'jobs')
+                                .leftJoinAndSelect('jobs.jobIndustry', 'jobIndustry')
+                                .leftJoinAndSelect('jobs.jobType', 'jobType')
+                                .leftJoinAndSelect('jobs.jobLevel', 'jobLevel')
+                                .leftJoinAndSelect('jobs.workLocation', 'workLocation')
+                                .leftJoinAndSelect('workLocation.district', 'jobDistrict')
+                                .leftJoinAndSelect('jobs.generalInformation', 'generalInformation')
+                                .leftJoinAndSelect('jobs.refJob', 'refJob')
+                                .leftJoinAndSelect('company.workLocations', 'workLocations')
+                                .leftJoinAndSelect('workLocations.district', 'companyDistrict')
+                                .leftJoinAndSelect('company.companyIndustries', 'companyIndustries')
                                 .leftJoinAndSelect('company.images', 'images')
-                                .leftJoinAndSelect('job.refJob', 'refJob')
-                                .leftJoinAndSelect('job.jobType', 'jobType')
-                                .leftJoinAndSelect('job.jobLevel', 'jobLevel')
-                                .leftJoinAndSelect('job.jobIndustry', 'jobIndustry')
-                                .leftJoinAndSelect('job.generalInformation', 'generalInformation')
+                                .leftJoinAndSelect('company.taxCodes', 'taxCodes') // Thêm join với tax_code
                                 .where('company.name LIKE :name', { name: `%${name}%` })
-                                .getMany();
+                                .getOne();
 
-                        return jobs;
+                        if (!company) {
+                                throw new NotFoundException('Company not found');
+                        }
+
+                        // Map the response to the desired structure
+                        return {
+                                success: true,
+                                data: {
+                                        company: {
+                                                companyId: company.companyId,
+                                                name: company.name,
+                                                created_at: company.created_at,
+                                                updated_at: company.updated_at,
+                                                phoneNumber_company: company.phoneNumber_company,
+                                                company_description: company.company_description,
+                                                workLocations: company.workLocations.map(
+                                                        (location) => ({
+                                                                workLocationId:
+                                                                        location.workLocationId,
+                                                                address_name: location.address_name,
+                                                                created_at: location.created_at,
+                                                                updated_at: location.updated_at,
+                                                                district: {
+                                                                        districtId: location
+                                                                                .district
+                                                                                .districtId,
+                                                                        name: location.district
+                                                                                .name,
+                                                                },
+                                                        })
+                                                ),
+                                                taxCodes: company.taxCodes
+                                                        ? company.taxCodes.map((taxCode) => ({
+                                                                  taxCodeId: taxCode.taxCodeId, // Sử dụng taxId từ bảng tax_code
+                                                                  companyId: taxCode.companyId,
+                                                                  companyTaxIdentificationNumber:
+                                                                          taxCode.companyTaxIdentificationNumber,
+                                                                  companySize: taxCode.companySize, // Đổi Company_size thành camelCase nếu cần
+                                                                  personalTaxCode:
+                                                                          taxCode.personalTaxCode,
+                                                                  created_at: taxCode.created_at,
+                                                          }))
+                                                        : [], // Trả về mảng rỗng thay vì null để dễ xử lý
+                                                companyIndustries: company.companyIndustries.map(
+                                                        (industry) => ({
+                                                                companyIndustry_ID:
+                                                                        industry.companyIndustry_ID,
+                                                                name: industry.name,
+                                                        })
+                                                ),
+                                                images: company.images
+                                                        ? company.images.map((image) => ({
+                                                                  companyId: image.companyId,
+                                                                  image_company:
+                                                                          image.image_company,
+                                                                  banner_BackgroundImage_company:
+                                                                          image.banner_BackgroundImage_company,
+                                                          }))
+                                                        : null,
+                                                jobs: company.jobs.map((job) => ({
+                                                        jobId: job.jobId,
+                                                        title: job.title,
+                                                        jobLevel: {
+                                                                jobLevelId: job.jobLevel.jobLevelId,
+                                                                name: job.jobLevel.name, // name là string[] theo interface
+                                                        },
+                                                        jobType: {
+                                                                jobTypeId: job.jobType.jobTypeId,
+                                                                work_at: job.jobType.work_at, // work_at là string[]
+                                                                name: job.jobType.name, // name là string[]
+                                                        },
+                                                        jobIndustry: {
+                                                                jobIndustryId:
+                                                                        job.jobIndustry
+                                                                                .jobIndustryId,
+                                                                name: job.jobIndustry.name,
+                                                        },
+                                                        workLocation: {
+                                                                workLocationId:
+                                                                        job.workLocation
+                                                                                .workLocationId,
+                                                                address_name:
+                                                                        job.workLocation
+                                                                                .address_name,
+                                                                district: {
+                                                                        districtId: job.workLocation
+                                                                                .district
+                                                                                .districtId,
+                                                                        name: job.workLocation
+                                                                                .district.name,
+                                                                },
+                                                                created_at: job.workLocation
+                                                                        .created_at,
+                                                                updated_at: job.workLocation
+                                                                        .updated_at,
+                                                        },
+                                                        generalInformation: {
+                                                                general_Information_Id:
+                                                                        job.generalInformation
+                                                                                .general_Information_Id,
+                                                                numberOfRecruits:
+                                                                        job.generalInformation
+                                                                                .numberOfRecruits,
+                                                                gender: job.generalInformation
+                                                                        .gender,
+                                                                tech_stack: job.generalInformation
+                                                                        .tech_stack, // Include tech_stack
+                                                        },
+                                                        salary_from: job.salary_from,
+                                                        salary_to: job.salary_to,
+                                                        expire_on: job.expire_on,
+                                                        description: job.description,
+                                                        requirement: job.requirement,
+                                                        benefits: job.benefits,
+                                                        refJob: job.refJob
+                                                                ? {
+                                                                          ref_job_Id: job.refJob
+                                                                                  .ref_job_Id,
+                                                                          ref_url: job.refJob
+                                                                                  .ref_url,
+                                                                          created_at: job.refJob
+                                                                                  .created_at,
+                                                                          updated_at: job.refJob
+                                                                                  .updated_at,
+                                                                  }
+                                                                : null,
+                                                        work_time: job.work_time,
+                                                        view: job.view,
+                                                        Hot_Job: job.Hot_Job || 'Null',
+                                                        created_at: job.created_at,
+                                                        updated_at: job.updated_at,
+                                                })),
+                                        },
+                                },
+                        };
                 } catch (error) {
-                        throw new Error(`Error retrieving jobs by tech: ${error.message}`);
+                        throw new Error(`Error retrieving jobs by company name: ${error.message}`);
                 }
         }
 
@@ -901,8 +1039,6 @@ export class JobService {
                                 );
                         }
                         console.log('BE Service: Found workLocation:', workLocation);
-
-                      
 
                         // Tạo jobId duy nhất
                         let jobId: number;
@@ -1025,7 +1161,12 @@ export class JobService {
                                 workLocation,
                                 generalInformation,
                                 company,
-                                salary: jobData.salaryFrom +'VND' + 'to' + jobData.salaryTo + 'VND',
+                                salary:
+                                        jobData.salaryFrom +
+                                        'VND' +
+                                        'to' +
+                                        jobData.salaryTo +
+                                        'VND',
                                 salary_from:
                                         jobData.salaryType === 'Thương lượng'
                                                 ? 0

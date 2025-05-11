@@ -13,6 +13,7 @@ import { WorkLocation } from './work_location.entity';
 import { Job } from './job.entity';
 import { Recruitment } from './recruitment.entity';
 import { CompanyIndustry } from './company_industry.entity';
+import { TaxCode } from './tax_code.entity';
 
 @Entity('company')
 export class Company {
@@ -52,4 +53,7 @@ export class Company {
 
         @OneToMany(() => CompanyIndustry, (companyIndustry) => companyIndustry.company)
         companyIndustries: CompanyIndustry[];
+
+        @OneToMany(() => TaxCode, (taxCode) => taxCode.company)
+        taxCodes: TaxCode[];
 }

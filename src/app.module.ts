@@ -54,8 +54,8 @@ console.log('DB Config:', {
                         port: parseInt(process.env.DB_PORT, 10) || 3306,
                         username: process.env.DB_USER || 'root',
                         password: process.env.DB_PASSWORD || '',
-                        // database: process.env.DB_NAME || 'jobmarket',
-                        database: process.env.DB_NAME || 'jobmarket_backup',
+                        database: process.env.DB_NAME || 'jobmarket',
+                        // database: process.env.DB_NAME || 'jobmarket_backup',
                         entities: [__dirname + '/**/*.entity{.ts,.js}'],
                         synchronize: false,
                 }),
@@ -124,7 +124,9 @@ export class AppModule implements NestModule {
                         { path: 'recruitment/getRecruitmentId', method: RequestMethod.GET },
                         { path: 'recruitment/updateBannerBackground', method: RequestMethod.PATCH },
                         { path: 'recruitment/updateCompanyLogo', method: RequestMethod.PATCH },
-                        { path: 'jobs/recruitment-PostJob', method: RequestMethod.POST }
+                        { path: 'jobs/recruitment-PostJob', method: RequestMethod.POST },
+                        { path: 'recruitment/company/:companyId/jobs', method: RequestMethod.GET },
+                        { path: 'recruitment/updateCompanyInfo', method: RequestMethod.PATCH }
                 );
         }
 }
